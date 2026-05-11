@@ -28,11 +28,12 @@ const CONFIG = {
 };
 
 const state = {
-    puzzle: null,
+    mode: 'normal',
+    currentPuzzle: null,
     guesses: [],
+    status: 'playing',
     selectedSuggestionIndex: -1,
-    currentSuggestions: [],
-    mode: 'normal'
+    currentSuggestions: []
 };
 
 const elements = {
@@ -86,6 +87,10 @@ function getBookByName(name) {
     return books.find(book => book.normalizedName === normalized);
 }
 
+function getPuzzleById(id) {
+    return verses.find(verse => verse.id === id) ?? null;
+}
+
 function getBookDistance(a, b) {
     const bookA = typeof a === 'string' ? getBookByName(a) : a;
     const bookB = typeof b === 'string' ? getBookByName(b) : b;
@@ -96,12 +101,12 @@ function getBookDistance(a, b) {
 }
 
 function isSameSection(a, b) {
-  const bookA = typeof a === 'string' ? getBookByName(a) : a;
-  const bookB = typeof b === 'string' ? getBookByName(b) : b;
+    const bookA = typeof a === 'string' ? getBookByName(a) : a;
+    const bookB = typeof b === 'string' ? getBookByName(b) : b;
 
-  if (!bookA || !bookB) return false;
+    if (!bookA || !bookB) return false;
 
-  return bookA.sectionKey === bookB.sectionKey;
+    return bookA.sectionKey === bookB.sectionKey;
 }
 
 function getProximityLabel(distance) {
@@ -110,6 +115,14 @@ function getProximityLabel(distance) {
     if (distance <= CONFIG.proximityBands.almost) return 'almost';
     if (distance <= CONFIG.proximityBands.close) return 'close';
     return 'far';
+}
+
+function getTodayPuzzleDate() {
+    const now = new Date();
+    const year = now.getUTCFullYear();
+    const month = String(now.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(now.getUTCDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
 }
 
 function getDailyIndex() {
@@ -136,6 +149,93 @@ function pickPuzzle(mode = 'daily') {
     return verses[((getDailyIndex() % verses.length) + verses.length) % verses.length];
 }
 
+function buildCurrentPuzzle(mode = 'daily') {
+    const puzzle = pickPuzzle(mode);
+
+    return {
+        id: puzzle.id,
+        date: mode === 'daily' ? getTodayPuzzleDate() : null,
+        mode,
+        verse: puzzle
+    };
+}
+
+function clearSavedProgress() {
+    try {
+        localStorage.removeItem(CONFIG.storageKeys.progress);
+    } catch {
+        // Ignore storage failures.
+    }
+}
+
+function saveProgress() {
+    if (!state.currentPuzzle) return;
+
+    const payload = {
+        mode: state.mode,
+        currentPuzzle: {
+            id: state.currentPuzzle.id,
+            date: state.currentPuzzle.date,
+            mode: state.currentPuzzle.mode
+        },
+        guesses: state.guesses,
+        status: state.status
+    };
+
+    try {
+        localStorage.setItem(CONFIG.storageKeys.progress, JSON.stringify(payload));
+    } catch {
+        // Ignore storage failures.
+    }
+}
+
+function loadProgress() {
+    try {
+        const raw = localStorage.getItem(CONFIG.storageKeys.progress);
+        if (!raw) return false;
+
+        const saved = JSON.parse(raw);
+        if (!saved || !saved.currentPuzzle?.id) {
+            clearSavedProgress();
+            return false;
+        }
+
+        const savedPuzzle = getPuzzleById(saved.currentPuzzle.id);
+        if (!savedPuzzle) {
+            clearSavedProgress();
+            return false;
+        }
+
+        const todayPuzzle = pickPuzzle('daily');
+        const todayDate = getTodayPuzzleDate();
+
+        const isMatchingDailyPuzzle =
+            saved.currentPuzzle.mode === 'daily' &&
+            saved.currentPuzzle.date === todayDate &&
+            saved.currentPuzzle.id === todayPuzzle.id;
+
+        if (!isMatchingDailyPuzzle) {
+            clearSavedProgress();
+            return false;
+        }
+
+        state.mode = saved.mode && CONFIG.modes[saved.mode] ? saved.mode : 'normal';
+        state.currentPuzzle = {
+            id: savedPuzzle.id,
+            date: saved.currentPuzzle.date,
+            mode: 'daily',
+            verse: savedPuzzle
+        };
+        state.guesses = Array.isArray(saved.guesses) ? saved.guesses : [];
+        state.status = ['playing', 'won', 'lost'].includes(saved.status) ? saved.status : 'playing';
+
+        return true;
+    } catch {
+        clearSavedProgress();
+        return false;
+    }
+}
+
 function formatDate() {
     return new Date().toLocaleDateString(undefined, {
         weekday: 'long',
@@ -145,8 +245,16 @@ function formatDate() {
     });
 }
 
+function getMaxGuesses() {
+    return CONFIG.modes[state.mode]?.maxGuesses ?? CONFIG.modes.normal.maxGuesses;
+}
+
+function isGameOver() {
+    return state.status === 'won' || state.status === 'lost';
+}
+
 function getHintLines() {
-    const target = getBookByName(state.puzzle.book);
+    const target = getBookByName(state.currentPuzzle?.verse.book);
     if (!target) return [];
 
     if (state.guesses.length === 0) {
@@ -179,12 +287,12 @@ function getHintLines() {
         'It is in the ' + target.testament + ' Testament.',
         'It is in the ' + target.section + ' section.',
         'Its first letter is ' + target.firstLetter + '.',
-        'Reference: ' + state.puzzle.reference + '.'
+        'Reference: ' + state.currentPuzzle.verse.reference + '.'
     ];
 }
 
 function compareGuess(guessName) {
-    const target = getBookByName(state.puzzle.book);
+    const target = getBookByName(state.currentPuzzle?.verse.book);
     const guess = getBookByName(guessName);
 
     if (!target || !guess) return null;
@@ -225,13 +333,14 @@ function compareGuess(guessName) {
 }
 
 function getAttemptLabel() {
+    if (state.status === 'won') return 'You solved it';
+    if (state.status === 'lost') return 'Out of guesses';
     if (state.guesses.length === 0) return 'Start guessing';
-    if (state.guesses.at(-1).solved) return 'You solved it';
     return 'Guess again';
 }
 
 function renderPuzzleCard() {
-    elements.verseText.textContent = state.puzzle?.text ?? '';
+    elements.verseText.textContent = state.currentPuzzle?.verse.text ?? '';
     elements.dateLabel.textContent = formatDate();
 }
 
@@ -282,6 +391,17 @@ function renderPuzzleView() {
     renderPuzzleCard();
     renderHintBlock();
     renderGuessRows();
+
+    if (state.status === 'won') {
+        renderStatus(`Correct — ${state.currentPuzzle.verse.book} (${state.currentPuzzle.verse.reference}).`);
+        return;
+    }
+
+    if (state.status === 'lost') {
+        renderStatus(`Out of guesses — the answer was ${state.currentPuzzle.verse.book} (${state.currentPuzzle.verse.reference}).`);
+        return;
+    }
+
     renderStatus();
 }
 
@@ -300,12 +420,18 @@ function closeSuggestions() {
     elements.autocomplete.innerHTML = '';
 }
 
-function resetPuzzle(mode = 'daily') {
-    state.puzzle = pickPuzzle(mode);
+function startPuzzle(mode = 'daily') {
+    state.currentPuzzle = buildCurrentPuzzle(mode);
     state.guesses = [];
+    state.status = 'playing';
     resetInput();
     resetSuggestionsState();
     closeSuggestions();
+}
+
+function resetPuzzle(mode = 'daily') {
+    startPuzzle(mode);
+    saveProgress();
     renderPuzzleView();
 }
 
@@ -354,9 +480,19 @@ function handleDuplicateGuess(bookName) {
 }
 
 function handleSolvedGuess() {
+    state.status = 'won';
     renderHintBlock();
     renderGuessRows();
-    renderStatus(`Correct — ${state.puzzle.book} (${state.puzzle.reference}).`);
+    renderStatus(`Correct — ${state.currentPuzzle.verse.book} (${state.currentPuzzle.verse.reference}).`);
+    saveProgress();
+}
+
+function handleLostGuess() {
+    state.status = 'lost';
+    renderHintBlock();
+    renderGuessRows();
+    renderStatus(`Out of guesses — the answer was ${state.currentPuzzle.verse.book} (${state.currentPuzzle.verse.reference}).`);
+    saveProgress();
 }
 
 function handleIncorrectGuess(bookName, proximity) {
@@ -370,9 +506,15 @@ function handleIncorrectGuess(bookName, proximity) {
     renderHintBlock();
     renderGuessRows();
     renderStatus(`${bookName} added. Use the colors and clues for your next guess.${proximityText[proximity] ?? ''}`);
+    saveProgress();
 }
 
 function applyGuess(rawGuess) {
+    if (isGameOver()) {
+        renderPuzzleView();
+        return;
+    }
+
     const match = getBookByName(rawGuess);
 
     if (!match) {
@@ -398,6 +540,11 @@ function applyGuess(rawGuess) {
         return;
     }
 
+    if (state.guesses.length >= getMaxGuesses()) {
+        handleLostGuess();
+        return;
+    }
+
     handleIncorrectGuess(match.name, result.proximity);
 }
 
@@ -414,10 +561,10 @@ function buildShareSummary() {
 }
 
 function buildShareText() {
-    const solved = state.guesses.some(guess => guess.solved);
+    const solved = state.status === 'won';
     const guessWord = state.guesses.length === 1 ? 'guess' : 'guesses';
 
-    return `Bibdle ${formatDate()}\n${solved ? 'Solved' : 'In progress'} in ${state.guesses.length} ${guessWord}\n${buildShareSummary()}`;
+    return `Bibdle ${formatDate()}\n${solved ? 'Solved' : state.status === 'lost' ? 'Lost' : 'In progress'} in ${state.guesses.length} ${guessWord}\n${buildShareSummary()}`;
 }
 
 async function copyResult() {
@@ -445,10 +592,13 @@ function handleGuessSubmit(event) {
 }
 
 function handleGuessInput(event) {
+    if (isGameOver()) return;
     updateSuggestions(event.target.value);
 }
 
 function handleGuessKeydown(event) {
+    if (isGameOver()) return;
+
     if (elements.autocomplete.dataset.open !== 'true') {
         if (event.key === 'Enter') {
             event.preventDefault();
@@ -515,10 +665,21 @@ function bindEvents() {
     elements.newPuzzleBtn.addEventListener('click', () => resetPuzzle('random'));
 }
 
+function initGame() {
+    const restored = loadProgress();
+
+    if (!restored) {
+        startPuzzle('daily');
+        saveProgress();
+    }
+
+    renderPuzzleView();
+}
+
 function init() {
     setThemeToggle();
     bindEvents();
-    resetPuzzle('daily');
+    initGame();
 }
 
 init();
