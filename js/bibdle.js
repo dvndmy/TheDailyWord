@@ -1,11 +1,38 @@
 import { books } from './data/books.js';
 import { verses } from './data/verses.js';
 
+const CONFIG = {
+    modes: {
+        normal: { maxGuesses: 6, progressiveHints: true },
+        easy: { maxGuesses: 8, progressiveHints: true },
+        hard: { maxGuesses: 5, progressiveHints: false }
+    },
+    proximityBands: {
+        exact: 0,
+        almost: 2,
+        close: 4
+    },
+    ui: {
+        maxSuggestions: 8
+    },
+    daily: {
+        epochYear: 2026,
+        epochMonth: 0,
+        epochDay: 1
+    },
+    storageKeys: {
+        progress: 'bibdle-progress',
+        preferences: 'bibdle-preferences',
+        stats: 'bibdle-stats'
+    }
+};
+
 const state = {
     puzzle: null,
     guesses: [],
     selectedSuggestionIndex: -1,
-    currentSuggestions: []
+    currentSuggestions: [],
+    mode: 'normal'
 };
 
 const elements = {
@@ -54,8 +81,35 @@ function normalizeBookName(value) {
     return value.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
-function getBook(name) {
-    return books.find(book => normalizeBookName(book.name) === normalizeBookName(name));
+function getBookByName(name) {
+    const normalized = normalizeBookName(name);
+    return books.find(book => book.normalizedName === normalized);
+}
+
+function getBookDistance(a, b) {
+    const bookA = typeof a === 'string' ? getBookByName(a) : a;
+    const bookB = typeof b === 'string' ? getBookByName(b) : b;
+
+    if (!bookA || !bookB) return null;
+
+    return Math.abs(bookA.order - bookB.order);
+}
+
+function isSameSection(a, b) {
+  const bookA = typeof a === 'string' ? getBookByName(a) : a;
+  const bookB = typeof b === 'string' ? getBookByName(b) : b;
+
+  if (!bookA || !bookB) return false;
+
+  return bookA.sectionKey === bookB.sectionKey;
+}
+
+function getProximityLabel(distance) {
+    if (distance === null) return 'unknown';
+    if (distance <= CONFIG.proximityBands.exact) return 'exact';
+    if (distance <= CONFIG.proximityBands.almost) return 'almost';
+    if (distance <= CONFIG.proximityBands.close) return 'close';
+    return 'far';
 }
 
 function getDailyIndex() {
@@ -63,7 +117,13 @@ function getDailyIndex() {
     const y = now.getUTCFullYear();
     const m = now.getUTCMonth();
     const d = now.getUTCDate();
-    const epoch = Date.UTC(2026, 0, 1);
+
+    const epoch = Date.UTC(
+        CONFIG.daily.epochYear,
+        CONFIG.daily.epochMonth,
+        CONFIG.daily.epochDay
+    );
+
     const current = Date.UTC(y, m, d);
     return Math.floor((current - epoch) / 86400000) % verses.length;
 }
@@ -86,7 +146,7 @@ function formatDate() {
 }
 
 function getHintLines() {
-    const target = getBook(state.puzzle.book);
+    const target = getBookByName(state.puzzle.book);
     if (!target) return [];
 
     if (state.guesses.length === 0) {
@@ -124,22 +184,25 @@ function getHintLines() {
 }
 
 function compareGuess(guessName) {
-    const target = getBook(state.puzzle.book);
-    const guess = getBook(guessName);
+    const target = getBookByName(state.puzzle.book);
+    const guess = getBookByName(guessName);
 
     if (!target || !guess) return null;
 
-    const distance = Math.abs(target.order - guess.order);
+    const distance = getBookDistance(target, guess);
+    const proximity = getProximityLabel(distance);
 
     return {
         book: guess.name,
+        distance,
+        proximity,
         testament: {
             value: guess.testament,
             state: guess.testament === target.testament ? 'correct' : 'wrong'
         },
         section: {
             value: guess.section,
-            state: guess.section === target.section
+            state: isSameSection(guess, target)
                 ? 'correct'
                 : guess.testament === target.testament
                     ? 'partial'
@@ -151,7 +214,11 @@ function compareGuess(guessName) {
         },
         bookResult: {
             value: guess.name,
-            state: guess.name === target.name ? 'correct' : distance <= 3 ? 'partial' : 'wrong'
+            state: proximity === 'exact'
+                ? 'correct'
+                : proximity === 'almost' || proximity === 'close'
+                    ? 'partial'
+                    : 'wrong'
         },
         solved: guess.name === target.name
     };
@@ -273,7 +340,7 @@ function updateSuggestions(query) {
 
     state.currentSuggestions = books
         .filter(book => book.name.toLowerCase().includes(value))
-        .slice(0, 8);
+        .slice(0, CONFIG.ui.maxSuggestions);
 
     renderSuggestions();
 }
@@ -292,14 +359,21 @@ function handleSolvedGuess() {
     renderStatus(`Correct — ${state.puzzle.book} (${state.puzzle.reference}).`);
 }
 
-function handleIncorrectGuess(bookName) {
+function handleIncorrectGuess(bookName, proximity) {
+    const proximityText = {
+        almost: ' Your guess is almost the target in canon order.',
+        close: ' Your guess is fairly close in canon order.',
+        far: '',
+        unknown: ''
+    };
+
     renderHintBlock();
     renderGuessRows();
-    renderStatus(`${bookName} added. Use the colors and clues for your next guess.`);
+    renderStatus(`${bookName} added. Use the colors and clues for your next guess.${proximityText[proximity] ?? ''}`);
 }
 
 function applyGuess(rawGuess) {
-    const match = books.find(book => normalizeBookName(book.name) === normalizeBookName(rawGuess));
+    const match = getBookByName(rawGuess);
 
     if (!match) {
         handleInvalidGuess();
@@ -324,7 +398,7 @@ function applyGuess(rawGuess) {
         return;
     }
 
-    handleIncorrectGuess(match.name);
+    handleIncorrectGuess(match.name, result.proximity);
 }
 
 function buildShareSummary() {
