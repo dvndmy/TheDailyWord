@@ -600,23 +600,29 @@ function renderEmptyGuessRows() {
   `;
 }
 
-function renderGuessRow(guess) {
+function renderGuessRow(guess, rowIndex, animate = false) {
+  const baseDelay = animate ? rowIndex * 2000 : 0;
   return `
     <div class="guess-grid" aria-label="Guess ${guess.book}">
-      <div class="guess-card ${guess.testament.state}">${guess.testament.value}</div>
-      <div class="guess-card ${guess.section.state}">${guess.section.value}</div>
-      <div class="guess-card ${guess.firstLetter.state}">${guess.firstLetter.value}</div>
-      <div class="guess-card ${guess.bookResult.state}">${guess.bookResult.value}</div>
+      <div class="guess-card ${guess.testament.state}${animate ? " reveal-animate" : ""}" style="--reveal-delay: ${baseDelay + 0}ms">${guess.testament.value}</div>
+      <div class="guess-card ${guess.section.state}${animate ? " reveal-animate" : ""}" style="--reveal-delay: ${baseDelay + 180}ms">${guess.section.value}</div>
+      <div class="guess-card ${guess.firstLetter.state}${animate ? " reveal-animate" : ""}" style="--reveal-delay: ${baseDelay + 360}ms">${guess.firstLetter.value}</div>
+      <div class="guess-card ${guess.bookResult.state}${animate ? " reveal-animate" : ""}" style="--reveal-delay: ${baseDelay + 540}ms">${guess.bookResult.value}</div>
     </div>
   `;
 }
 
-function renderGuessRows() {
+function renderGuessRows(animateLatest = false) {
   if (!state.guesses.length) {
     renderEmptyGuessRows();
     return;
   }
-  elements.guessRows.innerHTML = state.guesses.map(renderGuessRow).join("");
+  const lastIndex = state.guesses.length - 1;
+  elements.guessRows.innerHTML = state.guesses
+    .map((guess, index) =>
+      renderGuessRow(guess, index, animateLatest && index === lastIndex),
+    )
+    .join("");
 }
 
 function renderProximityLine() {
@@ -791,7 +797,7 @@ function handleSolvedGuess() {
   state.status = "won";
   recordPuzzleCompletion("won");
   renderHintBlock();
-  renderGuessRows();
+  renderGuessRows(true);
   renderProximityLine();
   syncPreferenceControls();
   syncActionButtons();
@@ -806,7 +812,7 @@ function handleLostGuess() {
   state.status = "lost";
   recordPuzzleCompletion("lost");
   renderHintBlock();
-  renderGuessRows();
+  renderGuessRows(true);
   renderProximityLine();
   syncPreferenceControls();
   syncActionButtons();
@@ -819,7 +825,7 @@ function handleLostGuess() {
 
 function handleIncorrectGuess(bookName) {
   renderHintBlock();
-  renderGuessRows();
+  renderGuessRows(true);
   renderProximityLine();
   syncPreferenceControls();
   syncActionButtons();
@@ -883,7 +889,9 @@ function buildShareText() {
   const solved = state.status === "won";
   const guessWord = state.guesses.length === 1 ? "guess" : "guesses";
   const modeLabel = state.mode === "daily" ? "Daily" : "Practice";
-  return `Bibdle ${modeLabel} ${formatDate()}\n${solved ? "Solved" : state.status === "lost" ? "Lost" : "In progress"} in ${state.guesses.length} ${guessWord}\n${buildShareSummary()}`;
+  return `Bibdle ${modeLabel} ${formatDate()}
+${solved ? "Solved" : state.status === "lost" ? "Lost" : "In progress"} in ${state.guesses.length} ${guessWord}
+${buildShareSummary()}`;
 }
 
 async function copyResult() {
