@@ -3,9 +3,36 @@ import { verses } from "./data/verses.js";
 
 const CONFIG = {
   modes: {
-    normal: { maxGuesses: 6, progressiveHints: true },
-    easy: { maxGuesses: 8, progressiveHints: true },
-    hard: { maxGuesses: 5, progressiveHints: false },
+    normal: {
+      maxGuesses: 6,
+      progressiveHints: true,
+      hintSchedule: {
+        testamentAt: 1,
+        sectionAt: 3,
+        firstLetterAt: 4,
+        referenceAt: 6,
+      },
+    },
+    easy: {
+      maxGuesses: 8,
+      progressiveHints: true,
+      hintSchedule: {
+        testamentAt: 1,
+        sectionAt: 3,
+        firstLetterAt: 4,
+        referenceAt: 7,
+      },
+    },
+    hard: {
+      maxGuesses: 5,
+      progressiveHints: false,
+      hintSchedule: {
+        testamentAt: 1,
+        sectionAt: 4,
+        firstLetterAt: 5,
+        referenceAt: null,
+      },
+    },
   },
   proximityBands: {
     exact: 0,
@@ -608,7 +635,21 @@ function getMaxGuesses() {
     CONFIG.modes.normal.maxGuesses
   );
 }
+function getCurrentModeConfig() {
+  return (
+    CONFIG.modes[state.preferences.difficulty] ??
+    CONFIG.modes.normal
+  );
+}
 
+function getHintSchedule() {
+  return getCurrentModeConfig().hintSchedule ?? {
+    testamentAt: 1,
+    sectionAt: 2,
+    firstLetterAt: 4,
+    referenceAt: 6,
+  };
+}
 function isGameOver() {
   return state.status === "won" || state.status === "lost";
 }
@@ -616,33 +657,61 @@ function isGameOver() {
 function getHintLines() {
   const target = getBookByName(state.currentPuzzle?.verse.book);
   if (!target) return [];
-  if (state.guesses.length === 0)
-    return ["The first letter is hidden until later guesses."];
-  if (state.guesses.length === 1) {
-    return [
-      "It is in the " + target.testament + " Testament.",
-      "Its first letter is hidden until later guesses.",
-    ];
+
+  const guessCount = state.guesses.length;
+  const difficulty = state.preferences.difficulty;
+  const schedule = getHintSchedule();
+  const lines = [];
+
+  const shouldRevealTestament =
+    Number.isInteger(schedule.testamentAt) &&
+    guessCount >= schedule.testamentAt;
+
+  const shouldRevealSection =
+    Number.isInteger(schedule.sectionAt) &&
+    guessCount >= schedule.sectionAt;
+
+  const shouldRevealFirstLetter =
+    Number.isInteger(schedule.firstLetterAt) &&
+    guessCount >= schedule.firstLetterAt;
+
+  const shouldRevealReference =
+    Number.isInteger(schedule.referenceAt) &&
+    guessCount >= schedule.referenceAt;
+
+  if (shouldRevealTestament) {
+    lines.push("It is in the " + target.testament + " Testament.");
   }
-  if (state.guesses.length <= 3) {
-    return [
-      "It is in the " + target.testament + " Testament.",
-      "It is in the " + target.section + " section.",
-    ];
+
+  if (shouldRevealSection) {
+    lines.push("It is in the " + target.section + " section.");
   }
-  if (state.guesses.length <= 5) {
-    return [
-      "It is in the " + target.testament + " Testament.",
-      "It is in the " + target.section + " section.",
-      "Its first letter is " + target.firstLetter + ".",
-    ];
+
+  if (shouldRevealFirstLetter) {
+    lines.push("Its first letter is " + target.firstLetter + ".");
+  } else if (guessCount === 0) {
+    if (difficulty === "easy") {
+      lines.push("The first letter will appear soon.");
+    } else if (difficulty === "hard") {
+      lines.push("Only limited hints are available in Hard mode.");
+    } else {
+      lines.push("The first letter is hidden until later guesses.");
+    }
+  } else if (difficulty === "easy") {
+    lines.push("The first letter will appear soon.");
+  } else if (difficulty === "hard") {
+    lines.push("The first letter stays hidden until much later.");
+  } else {
+    lines.push("The first letter is hidden until later guesses.");
   }
-  return [
-    "It is in the " + target.testament + " Testament.",
-    "It is in the " + target.section + " section.",
-    "Its first letter is " + target.firstLetter + ".",
-    "Reference: " + state.currentPuzzle.verse.reference + ".",
-  ];
+
+  if (shouldRevealReference) {
+    lines.push("Reference: " + state.currentPuzzle.verse.reference + ".");
+  } else if (difficulty === "hard" && schedule.referenceAt === null && guessCount > 0) {
+    lines.push("No reference hint is available in Hard mode.");
+  }
+
+  return lines;
 }
 
 function compareGuess(guessName) {
@@ -1316,10 +1385,12 @@ function handleDifficultyChange(event) {
   }
   const value = event.target.value;
   if (!CONFIG.modes[value]) return;
+
   state.preferences.difficulty = value;
   savePreferences();
   saveProgress();
   syncPreferenceControls();
+  renderPuzzleView();
 }
 
 function handleModeChange(event) {
