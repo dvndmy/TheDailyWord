@@ -105,7 +105,8 @@
           <button type="button" class="pill-btn primary" id="nextPracticeBtn" hidden>Next practice puzzle</button>
         </div>
 
-        <p class="footer-note">A Wordle-style game that asks you to identify the Bible book from its verse, testament, section, and first-letter clues.</p>
+        <p class="footer-note">A Wordle-style game that asks you to identify the Bible book from its verse, testament,
+          section, and first-letter clues.</p>
       </section>
     </section>
   </main>
@@ -113,10 +114,12 @@
   <div class="modal-backdrop" id="helpModal" data-open="false" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
       <h2 id="helpTitle">How to play</h2>
-      <p>Read the verse, then guess the Bible book it comes from. Each guess reveals whether your choice matches the correct testament, section, first letter, and the book itself.</p>
+      <p>Read the verse, then guess the Bible book it comes from. Each guess reveals whether your choice matches the
+        correct testament, section, first letter, and the book itself.</p>
       <ul>
         <li>You can type part of a book name and choose from the suggestion list.</li>
-        <li>Green means exact match, gold means you are near the right book in canonical order, and red means that clue is wrong.</li>
+        <li>Green means exact match, gold means you are near the right book in canonical order, and red means that clue
+          is wrong.</li>
         <li>Daily gives one deterministic puzzle based on the date, while Practice gives random verses from the pool.
         </li>
         <li>Only Daily mode counts toward daily streaks and recorded stats.</li>
@@ -198,6 +201,27 @@
             <div class="streak-badges" id="statsModalBadges"></div>
           </div>
         </section>
+        <section class="postgame-section stats-section" aria-label="Practice stats">
+          <p class="subtle-label">Practice mode</p>
+
+          <div class="stats-grid">
+            <div class="stat-item">
+              <span class="stat-value" id="practiceStatsPlayed">0</span>
+              <span class="stat-label">Played</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value" id="practiceStatsWon">0</span>
+              <span class="stat-label">Won</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value" id="practiceStatsLost">0</span>
+              <span class="stat-label">Lost</span>
+            </div>
+          </div>
+
+          <div class="guess-distribution" id="practiceStatsGuessDistribution" aria-label="Practice guess distribution">
+          </div>
+        </section>
       </div>
 
       <div class="pill-actions postgame-actions">
@@ -240,9 +264,36 @@
           <div class="postgame-meta-chips" id="postGameTriviaChips"></div>
         </section>
 
-        <section class="postgame-section stats-section" aria-label="Streak badges">
-          <p class="subtle-label">Badges</p>
-          <div class="streak-badges" id="streakBadges"></div>
+        <section class="postgame-section stats-section" aria-label="Mode stats">
+          <p class="subtle-label" id="postGameStatsLabel">Stats</p>
+
+          <div class="stats-grid" id="postGameStatsGridPrimary">
+            <div class="stat-item">
+              <span class="stat-value" id="postGameStatsPlayed">0</span>
+              <span class="stat-label">Played</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value" id="postGameStatsWon">0</span>
+              <span class="stat-label">Won</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value" id="postGameStatsLost">0</span>
+              <span class="stat-label">Lost</span>
+            </div>
+          </div>
+
+          <div class="stats-grid stats-grid-secondary" id="postGameStatsGridSecondary">
+            <div class="stat-item" id="postGameCurrentStreakItem">
+              <span class="stat-value" id="postGameStatsCurrentStreak">0</span>
+              <span class="stat-label">Current streak</span>
+            </div>
+            <div class="stat-item" id="postGameBestStreakItem">
+              <span class="stat-value" id="postGameStatsBestStreak">0</span>
+              <span class="stat-label">Best streak</span>
+            </div>
+          </div>
+
+          <div class="guess-distribution" id="postGameGuessDistribution" aria-label="Guess distribution"></div>
         </section>
       </div>
       <div class="pill-actions postgame-actions">

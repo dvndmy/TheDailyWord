@@ -552,6 +552,12 @@ input::placeholder {
     justify-content: flex-end;
 }
 
+#postGameStatsGridSecondary[hidden],
+#postGameCurrentStreakItem[hidden],
+#postGameBestStreakItem[hidden] {
+    display: none !important;
+}
+
 .pill-btn,
 .control-select {
     min-height: 44px;

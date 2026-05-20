@@ -81,14 +81,22 @@ const state = {
     largeText: false,
   },
   stats: {
-    played: 0,
-    won: 0,
-    lost: 0,
-    currentStreak: 0,
-    bestStreak: 0,
-    guessDistribution: {},
-    lastDailySolvedDate: null,
-    earnedBadges: [],
+    daily: {
+      played: 0,
+      won: 0,
+      lost: 0,
+      currentStreak: 0,
+      bestStreak: 0,
+      guessDistribution: {},
+      lastDailySolvedDate: null,
+      earnedBadges: [],
+    },
+    practice: {
+      played: 0,
+      won: 0,
+      lost: 0,
+      guessDistribution: {},
+    },
   },
 };
 
@@ -134,7 +142,20 @@ const elements = {
   statsBestStreak: document.getElementById("statsBestStreak"),
   statsGuessDistribution: document.getElementById("statsGuessDistribution"),
   statsModalBadges: document.getElementById("statsModalBadges"),
-
+  practiceStatsPlayed: document.getElementById("practiceStatsPlayed"),
+  practiceStatsWon: document.getElementById("practiceStatsWon"),
+  practiceStatsLost: document.getElementById("practiceStatsLost"),
+  practiceStatsGuessDistribution: document.getElementById("practiceStatsGuessDistribution"),
+  postGameStatsLabel: document.getElementById("postGameStatsLabel"),
+  postGameStatsGridSecondary: document.getElementById("postGameStatsGridSecondary"),
+  postGameStatsPlayed: document.getElementById("postGameStatsPlayed"),
+  postGameStatsWon: document.getElementById("postGameStatsWon"),
+  postGameStatsLost: document.getElementById("postGameStatsLost"),
+  postGameStatsCurrentStreak: document.getElementById("postGameStatsCurrentStreak"),
+  postGameStatsBestStreak: document.getElementById("postGameStatsBestStreak"),
+  postGameCurrentStreakItem: document.getElementById("postGameCurrentStreakItem"),
+  postGameBestStreakItem: document.getElementById("postGameBestStreakItem"),
+  postGameGuessDistribution: document.getElementById("postGameGuessDistribution"),
   postGameModal: document.getElementById("postGameModal"),
   postGameTitle: document.getElementById("postGameTitle"),
   postGameBadge: document.getElementById("postGameBadge"),
@@ -150,7 +171,6 @@ const elements = {
   postGameTriviaTitle: document.getElementById("postGameTriviaTitle"),
   postGameTriviaText: document.getElementById("postGameTriviaText"),
   postGameTriviaChips: document.getElementById("postGameTriviaChips"),
-  streakBadges: document.getElementById("streakBadges"),
 };
 
 function getSystemTheme() {
@@ -544,16 +564,24 @@ function loadPreferences() {
 
 function saveStats() {
   const payload = {
-    played: state.stats.played,
-    won: state.stats.won,
-    lost: state.stats.lost,
-    currentStreak: state.stats.currentStreak,
-    bestStreak: state.stats.bestStreak,
-    guessDistribution: state.stats.guessDistribution,
-    lastDailySolvedDate: state.stats.lastDailySolvedDate,
-    earnedBadges: Array.isArray(state.stats.earnedBadges)
-      ? state.stats.earnedBadges
-      : [],
+    daily: {
+      played: state.stats.daily.played,
+      won: state.stats.daily.won,
+      lost: state.stats.daily.lost,
+      currentStreak: state.stats.daily.currentStreak,
+      bestStreak: state.stats.daily.bestStreak,
+      guessDistribution: state.stats.daily.guessDistribution,
+      lastDailySolvedDate: state.stats.daily.lastDailySolvedDate,
+      earnedBadges: Array.isArray(state.stats.daily.earnedBadges)
+        ? state.stats.daily.earnedBadges
+        : [],
+    },
+    practice: {
+      played: state.stats.practice.played,
+      won: state.stats.practice.won,
+      lost: state.stats.practice.lost,
+      guessDistribution: state.stats.practice.guessDistribution,
+    },
   };
 
   try {
@@ -562,7 +590,7 @@ function saveStats() {
 }
 
 function loadStats() {
-  const defaults = {
+  const defaultDaily = {
     played: 0,
     won: 0,
     lost: 0,
@@ -573,72 +601,113 @@ function loadStats() {
     earnedBadges: [],
   };
 
+  const defaultPractice = {
+    played: 0,
+    won: 0,
+    lost: 0,
+    guessDistribution: {},
+  };
+
+  const sanitizeGuessDistribution = (value) =>
+    value && typeof value === "object" && !Array.isArray(value) ? value : {};
+
+  const sanitizeNonNegativeInt = (value, fallback = 0) =>
+    Number.isInteger(value) && value >= 0 ? value : fallback;
+
   try {
     const raw = localStorage.getItem(CONFIG.storageKeys.stats);
 
     if (!raw) {
-      state.stats = defaults;
+      state.stats = {
+        daily: defaultDaily,
+        practice: defaultPractice,
+      };
       return;
     }
 
     const saved = JSON.parse(raw);
 
+    const hasNestedShape =
+      saved?.daily &&
+      typeof saved.daily === "object" &&
+      saved?.practice &&
+      typeof saved.practice === "object";
+
+    if (hasNestedShape) {
+      state.stats = {
+        daily: {
+          played: sanitizeNonNegativeInt(saved.daily.played),
+          won: sanitizeNonNegativeInt(saved.daily.won),
+          lost: sanitizeNonNegativeInt(saved.daily.lost),
+          currentStreak: sanitizeNonNegativeInt(saved.daily.currentStreak),
+          bestStreak: sanitizeNonNegativeInt(saved.daily.bestStreak),
+          guessDistribution: sanitizeGuessDistribution(saved.daily.guessDistribution),
+          lastDailySolvedDate:
+            typeof saved.daily.lastDailySolvedDate === "string" ||
+              saved.daily.lastDailySolvedDate === null
+              ? saved.daily.lastDailySolvedDate
+              : null,
+          earnedBadges: Array.isArray(saved.daily.earnedBadges)
+            ? saved.daily.earnedBadges.filter((badgeId) =>
+              STREAK_BADGES.some((badge) => badge.id === badgeId),
+            )
+            : [],
+        },
+        practice: {
+          played: sanitizeNonNegativeInt(saved.practice.played),
+          won: sanitizeNonNegativeInt(saved.practice.won),
+          lost: sanitizeNonNegativeInt(saved.practice.lost),
+          guessDistribution: sanitizeGuessDistribution(saved.practice.guessDistribution),
+        },
+      };
+      return;
+    }
+
     state.stats = {
-      played:
-        Number.isInteger(saved?.played) && saved.played >= 0
-          ? saved.played
-          : defaults.played,
-      won:
-        Number.isInteger(saved?.won) && saved.won >= 0
-          ? saved.won
-          : defaults.won,
-      lost:
-        Number.isInteger(saved?.lost) && saved.lost >= 0
-          ? saved.lost
-          : defaults.lost,
-      currentStreak:
-        Number.isInteger(saved?.currentStreak) && saved.currentStreak >= 0
-          ? saved.currentStreak
-          : defaults.currentStreak,
-      bestStreak:
-        Number.isInteger(saved?.bestStreak) && saved.bestStreak >= 0
-          ? saved.bestStreak
-          : defaults.bestStreak,
-      guessDistribution:
-        saved?.guessDistribution &&
-          typeof saved.guessDistribution === "object" &&
-          !Array.isArray(saved.guessDistribution)
-          ? saved.guessDistribution
-          : defaults.guessDistribution,
-      lastDailySolvedDate:
-        typeof saved?.lastDailySolvedDate === "string" ||
-          saved?.lastDailySolvedDate === null
-          ? saved.lastDailySolvedDate
-          : defaults.lastDailySolvedDate,
-      earnedBadges: Array.isArray(saved?.earnedBadges)
-        ? saved.earnedBadges.filter((badgeId) =>
-          STREAK_BADGES.some((badge) => badge.id === badgeId),
-        )
-        : defaults.earnedBadges,
+      daily: {
+        played: sanitizeNonNegativeInt(saved?.played),
+        won: sanitizeNonNegativeInt(saved?.won),
+        lost: sanitizeNonNegativeInt(saved?.lost),
+        currentStreak: sanitizeNonNegativeInt(saved?.currentStreak),
+        bestStreak: sanitizeNonNegativeInt(saved?.bestStreak),
+        guessDistribution: sanitizeGuessDistribution(saved?.guessDistribution),
+        lastDailySolvedDate:
+          typeof saved?.lastDailySolvedDate === "string" ||
+            saved?.lastDailySolvedDate === null
+            ? saved.lastDailySolvedDate
+            : null,
+        earnedBadges: Array.isArray(saved?.earnedBadges)
+          ? saved.earnedBadges.filter((badgeId) =>
+            STREAK_BADGES.some((badge) => badge.id === badgeId),
+          )
+          : [],
+      },
+      practice: defaultPractice,
     };
   } catch {
-    state.stats = defaults;
+    state.stats = {
+      daily: defaultDaily,
+      practice: defaultPractice,
+    };
   }
 }
 
 function hasRecordedDailyResult(date) {
-  return state.stats.lastDailySolvedDate === date;
+  return state.stats.daily.lastDailySolvedDate === date;
 }
 
 function getEarnedBadgeIds() {
-  return Array.isArray(state.stats?.earnedBadges) ? state.stats.earnedBadges : [];
+  return Array.isArray(state.stats?.daily?.earnedBadges)
+    ? state.stats.daily.earnedBadges
+    : [];
 }
 
 function computeNewlyEarnedBadges() {
   const earnedBadgeIds = new Set(getEarnedBadgeIds());
   const currentStreak =
-    Number.isInteger(state.stats?.currentStreak) && state.stats.currentStreak >= 0
-      ? state.stats.currentStreak
+    Number.isInteger(state.stats?.daily?.currentStreak) &&
+      state.stats.daily.currentStreak >= 0
+      ? state.stats.daily.currentStreak
       : 0;
 
   return STREAK_BADGES.filter(
@@ -660,52 +729,71 @@ function awardStreakBadges() {
     }
   });
 
-  state.stats.earnedBadges = existing;
+  state.stats.daily.earnedBadges = existing;
   return newlyEarned;
 }
 
 function recordPuzzleCompletion(outcome) {
-  if (!state.currentPuzzle || state.currentPuzzle.mode !== "daily") return;
+  if (!state.currentPuzzle) return;
 
-  const completionDate = state.currentPuzzle.date;
-  if (completionDate && hasRecordedDailyResult(completionDate)) return;
+  if (state.currentPuzzle.mode === "daily") {
+    const completionDate = state.currentPuzzle.date;
+    if (completionDate && hasRecordedDailyResult(completionDate)) return;
 
-  state.stats.played += 1;
+    state.stats.daily.played += 1;
 
-  if (outcome === "won") {
-    state.stats.won += 1;
+    if (outcome === "won") {
+      state.stats.daily.won += 1;
 
-    const guessCount = state.guesses.length;
-    state.stats.guessDistribution[guessCount] =
-      (state.stats.guessDistribution[guessCount] ?? 0) + 1;
+      const guessCount = state.guesses.length;
+      state.stats.daily.guessDistribution[guessCount] =
+        (state.stats.daily.guessDistribution[guessCount] ?? 0) + 1;
 
-    if (completionDate) {
-      const previousDate = getPreviousDate(completionDate);
+      if (completionDate) {
+        const previousDate = getPreviousDate(completionDate);
 
-      state.stats.currentStreak =
-        state.stats.lastDailySolvedDate === previousDate
-          ? state.stats.currentStreak + 1
-          : 1;
+        state.stats.daily.currentStreak =
+          state.stats.daily.lastDailySolvedDate === previousDate
+            ? state.stats.daily.currentStreak + 1
+            : 1;
 
-      state.stats.bestStreak = Math.max(
-        state.stats.bestStreak,
-        state.stats.currentStreak,
-      );
+        state.stats.daily.bestStreak = Math.max(
+          state.stats.daily.bestStreak,
+          state.stats.daily.currentStreak,
+        );
 
-      state.stats.lastDailySolvedDate = completionDate;
+        state.stats.daily.lastDailySolvedDate = completionDate;
+      }
+
+      awardStreakBadges();
+    } else if (outcome === "lost") {
+      state.stats.daily.lost += 1;
+
+      if (completionDate) {
+        state.stats.daily.currentStreak = 0;
+        state.stats.daily.lastDailySolvedDate = completionDate;
+      }
     }
 
-    awardStreakBadges();
-  } else if (outcome === "lost") {
-    state.stats.lost += 1;
-
-    if (completionDate) {
-      state.stats.currentStreak = 0;
-      state.stats.lastDailySolvedDate = completionDate;
-    }
+    saveStats();
+    return;
   }
 
-  saveStats();
+  if (state.currentPuzzle.mode === "practice") {
+    state.stats.practice.played += 1;
+
+    if (outcome === "won") {
+      state.stats.practice.won += 1;
+
+      const guessCount = state.guesses.length;
+      state.stats.practice.guessDistribution[guessCount] =
+        (state.stats.practice.guessDistribution[guessCount] ?? 0) + 1;
+    } else if (outcome === "lost") {
+      state.stats.practice.lost += 1;
+    }
+
+    saveStats();
+  }
 }
 
 function applyTheme(theme) {
@@ -1000,37 +1088,43 @@ function renderStatus(message = "Guess the book from the verse above.") {
   elements.statusLine.textContent = message;
 }
 
-function computeStatsSummary() {
-  const stats = state.stats ?? {};
+function computeModeStatsSummary(mode = "daily") {
+  const source = mode === "practice" ? state.stats.practice : state.stats.daily;
+
   const played =
-    Number.isInteger(stats.played) && stats.played >= 0 ? stats.played : 0;
-  const won = Number.isInteger(stats.won) && stats.won >= 0 ? stats.won : 0;
+    Number.isInteger(source?.played) && source.played >= 0 ? source.played : 0;
+  const won = Number.isInteger(source?.won) && source.won >= 0 ? source.won : 0;
   const lost =
-    Number.isInteger(stats.lost) && stats.lost >= 0 ? stats.lost : 0;
+    Number.isInteger(source?.lost) && source.lost >= 0 ? source.lost : 0;
   const currentStreak =
-    Number.isInteger(stats.currentStreak) && stats.currentStreak >= 0
-      ? stats.currentStreak
+    mode === "daily" &&
+      Number.isInteger(source?.currentStreak) &&
+      source.currentStreak >= 0
+      ? source.currentStreak
       : 0;
   const bestStreak =
-    Number.isInteger(stats.bestStreak) && stats.bestStreak >= 0
-      ? stats.bestStreak
+    mode === "daily" &&
+      Number.isInteger(source?.bestStreak) &&
+      source.bestStreak >= 0
+      ? source.bestStreak
       : 0;
 
-  const source =
-    stats.guessDistribution &&
-      typeof stats.guessDistribution === "object" &&
-      !Array.isArray(stats.guessDistribution)
-      ? stats.guessDistribution
+  const rawDistribution =
+    source?.guessDistribution &&
+      typeof source.guessDistribution === "object" &&
+      !Array.isArray(source.guessDistribution)
+      ? source.guessDistribution
       : {};
 
+  const maxGuesses = 8;
   const guessDistribution = {};
-  for (let i = 1; i <= 8; i += 1) {
-    const value = source[i] ?? source[String(i)] ?? 0;
-    guessDistribution[i] =
-      Number.isInteger(value) && value >= 0 ? value : 0;
+  for (let i = 1; i <= maxGuesses; i += 1) {
+    const value = rawDistribution[i] ?? rawDistribution[String(i)] ?? 0;
+    guessDistribution[i] = Number.isInteger(value) && value >= 0 ? value : 0;
   }
 
   return {
+    mode,
     played,
     won,
     lost,
@@ -1038,6 +1132,50 @@ function computeStatsSummary() {
     bestStreak,
     guessDistribution,
   };
+}
+
+function renderPostGameStats(mode) {
+  const statsObj = computeModeStatsSummary(mode);
+  const isDaily = mode === "daily";
+
+  if (elements.postGameStatsLabel) {
+    elements.postGameStatsLabel.textContent = isDaily
+      ? "Daily stats"
+      : "Practice stats";
+  }
+
+  if (elements.postGameStatsPlayed) {
+    elements.postGameStatsPlayed.textContent = String(statsObj.played);
+  }
+  if (elements.postGameStatsWon) {
+    elements.postGameStatsWon.textContent = String(statsObj.won);
+  }
+  if (elements.postGameStatsLost) {
+    elements.postGameStatsLost.textContent = String(statsObj.lost);
+  }
+
+  if (elements.postGameStatsGridSecondary) {
+    elements.postGameStatsGridSecondary.hidden = !isDaily;
+  }
+  if (elements.postGameCurrentStreakItem) {
+    elements.postGameCurrentStreakItem.hidden = !isDaily;
+  }
+  if (elements.postGameBestStreakItem) {
+    elements.postGameBestStreakItem.hidden = !isDaily;
+  }
+
+  if (isDaily) {
+    if (elements.postGameStatsCurrentStreak) {
+      elements.postGameStatsCurrentStreak.textContent = String(statsObj.currentStreak);
+    }
+    if (elements.postGameStatsBestStreak) {
+      elements.postGameStatsBestStreak.textContent = String(statsObj.bestStreak);
+    }
+  }
+
+  if (elements.postGameGuessDistribution) {
+    renderStatsSection(statsObj, elements.postGameGuessDistribution);
+  }
 }
 
 function renderStatsSection(statsObj, container) {
@@ -1059,7 +1197,7 @@ function renderStatsSection(statsObj, container) {
   if (safeStats.played <= 0 && totalWins <= 0 && safeStats.lost <= 0) {
     const empty = document.createElement("p");
     empty.className = "dist-empty";
-    empty.textContent = "No stats yet";
+    empty.textContent = "No stats yet. Get playing to see your guess distribution here!";
     container.appendChild(empty);
     return;
   }
@@ -1270,28 +1408,42 @@ function getPostGameContent() {
 }
 
 function renderStatsModal() {
-  const statsObj = computeStatsSummary();
+  const dailyStats = computeModeStatsSummary("daily");
+  const practiceStats = computeModeStatsSummary("practice");
 
   if (elements.statsPlayed) {
-    elements.statsPlayed.textContent = String(statsObj.played);
+    elements.statsPlayed.textContent = String(dailyStats.played);
   }
   if (elements.statsWon) {
-    elements.statsWon.textContent = String(statsObj.won);
+    elements.statsWon.textContent = String(dailyStats.won);
   }
   if (elements.statsLost) {
-    elements.statsLost.textContent = String(statsObj.lost);
+    elements.statsLost.textContent = String(dailyStats.lost);
   }
   if (elements.statsCurrentStreak) {
-    elements.statsCurrentStreak.textContent = String(statsObj.currentStreak);
+    elements.statsCurrentStreak.textContent = String(dailyStats.currentStreak);
   }
   if (elements.statsBestStreak) {
-    elements.statsBestStreak.textContent = String(statsObj.bestStreak);
+    elements.statsBestStreak.textContent = String(dailyStats.bestStreak);
   }
   if (elements.statsGuessDistribution) {
-    renderStatsSection(statsObj, elements.statsGuessDistribution);
+    renderStatsSection(dailyStats, elements.statsGuessDistribution);
   }
   if (elements.statsModalBadges) {
     renderEarnedBadges(elements.statsModalBadges);
+  }
+
+  if (elements.practiceStatsPlayed) {
+    elements.practiceStatsPlayed.textContent = String(practiceStats.played);
+  }
+  if (elements.practiceStatsWon) {
+    elements.practiceStatsWon.textContent = String(practiceStats.won);
+  }
+  if (elements.practiceStatsLost) {
+    elements.practiceStatsLost.textContent = String(practiceStats.lost);
+  }
+  if (elements.practiceStatsGuessDistribution) {
+    renderStatsSection(practiceStats, elements.practiceStatsGuessDistribution);
   }
 }
 
@@ -1319,10 +1471,7 @@ function renderPostGamePanel() {
   elements.postGameNextBtn.hidden = state.mode !== "practice";
 
   renderTriviaSection(content.trivia);
-
-  if (elements.streakBadges) {
-    renderEarnedBadges(elements.streakBadges);
-  }
+  renderPostGameStats(state.mode);
 
   elements.postGameModal.dataset.open = "true";
   elements.postGameModal.setAttribute("aria-hidden", "false");
