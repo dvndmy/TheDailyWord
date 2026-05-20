@@ -5,11 +5,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Bibdle</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
     href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap"
-    rel="stylesheet">
+    rel="stylesheet" />
   <link rel="stylesheet" href="./css/bibdle.css" />
 </head>
 
@@ -20,6 +20,7 @@
     <section class="panel" aria-label="Bibdle game">
       <div class="topbar">
         <div class="topbar-controls">
+          <button class="pill-btn" type="button" id="settingsBtn">Settings</button>
           <div class="control-group">
             <label for="modeSelect" class="subtle-label">Mode</label>
             <select id="modeSelect" class="control-select" aria-label="Select puzzle mode">
@@ -57,6 +58,9 @@
           <h1 class="wordmark">Bibdle</h1>
         </div>
         <p class="date-label" id="dateLabel">Bible book puzzle</p>
+        <p class="date-label countdown-label" aria-live="polite" aria-atomic="true">
+          <span id="countdownTimer">Next puzzle in…</span>
+        </p>
       </header>
 
       <section class="verse-card" aria-live="polite">
@@ -95,6 +99,8 @@
         <p class="status-line" id="statusLine" role="status" aria-live="polite"></p>
 
         <div class="pill-actions">
+          <button type="button" class="pill-btn" id="statsBtn">See stats</button>
+          <button type="button" class="pill-btn" id="archiveBtn">Progress</button>
           <button type="button" class="pill-btn" id="helpBtn">How to play</button>
           <button type="button" class="pill-btn" id="shareBtn">Copy result</button>
           <button type="button" class="pill-btn primary" id="nextPracticeBtn" hidden>Next practice puzzle</button>
@@ -103,7 +109,6 @@
         <p class="footer-note">A Wordle-style game that asks you to identify the Bible book from its verse, testament,
           section, and first-letter clues.</p>
       </section>
-
     </section>
   </main>
 
@@ -120,12 +125,128 @@
         </li>
         <li>Only Daily mode counts toward daily streaks and recorded stats.</li>
       </ul>
-      <div class="pill-actions" style="justify-content:flex-end;">
+      <div class="pill-actions modal-actions-end">
         <button type="button" class="pill-btn primary" id="closeHelpBtn">Close</button>
       </div>
     </div>
   </div>
 
+  <div class="modal-backdrop" id="archiveModal" data-open="false" aria-hidden="true">
+    <div class="modal archive-modal" role="dialog" aria-modal="true" aria-labelledby="archiveTitle">
+      <h2 id="archiveTitle">Progress map</h2>
+
+      <div class="archive-summary" id="archiveSummary"></div>
+
+      <div class="archive-grid" id="archiveGrid" role="list" aria-label="Bible archive map by canonical order"></div>
+
+      <div class="archive-details" id="archiveDetails" aria-live="polite" aria-atomic="true"></div>
+
+      <div class="pill-actions modal-actions-end">
+        <button type="button" class="pill-btn primary" id="closeArchiveBtn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="settingsModal" data-open="false" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <h2 id="settingsTitle">Accessibility settings</h2>
+
+      <div class="settings-list">
+        <label class="settings-row" for="reducedMotionToggle">
+          <span>Reduced motion</span>
+          <input type="checkbox" id="reducedMotionToggle" />
+        </label>
+
+        <label class="settings-row" for="highContrastToggle">
+          <span>High contrast</span>
+          <input type="checkbox" id="highContrastToggle" />
+        </label>
+
+        <label class="settings-row" for="largeTextToggle">
+          <span>Larger text</span>
+          <input type="checkbox" id="largeTextToggle" />
+        </label>
+
+        <label class="settings-row" for="soundToggle">
+          <span>Sound</span>
+          <input type="checkbox" id="soundToggle" />
+        </label>
+      </div>
+
+      <div class="pill-actions modal-actions-end">
+        <button type="button" class="pill-btn primary" id="closeSettingsBtn">Close</button>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop" id="statsModal" data-open="false" aria-hidden="true">
+    <div class="modal postgame-modal" role="dialog" aria-modal="true" aria-labelledby="statsTitle"
+      aria-describedby="statsBody">
+      <h2 id="statsTitle">Historical stats</h2>
+
+      <div class="postgame-body" id="statsBody">
+        <section class="postgame-section stats-section" aria-label="Historical stats">
+          <p class="subtle-label">Daily mode</p>
+
+          <div class="stats-grid">
+            <div class="stat-item">
+              <span class="stat-value" id="statsPlayed">0</span>
+              <span class="stat-label">Played</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value" id="statsWon">0</span>
+              <span class="stat-label">Won</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value" id="statsLost">0</span>
+              <span class="stat-label">Lost</span>
+            </div>
+          </div>
+
+          <div class="stats-grid stats-grid-secondary">
+            <div class="stat-item">
+              <span class="stat-value" id="statsCurrentStreak">0</span>
+              <span class="stat-label">Current streak</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value" id="statsBestStreak">0</span>
+              <span class="stat-label">Best streak</span>
+            </div>
+          </div>
+
+          <div class="guess-distribution" id="statsGuessDistribution" aria-label="Guess distribution"></div>
+          <div class="postgame-section stats-section">
+            <p class="subtle-label">Badges</p>
+            <div class="streak-badges" id="statsModalBadges"></div>
+          </div>
+        </section>
+        <section class="postgame-section stats-section" aria-label="Practice stats">
+          <p class="subtle-label">Practice mode</p>
+
+          <div class="stats-grid">
+            <div class="stat-item">
+              <span class="stat-value" id="practiceStatsPlayed">0</span>
+              <span class="stat-label">Played</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value" id="practiceStatsWon">0</span>
+              <span class="stat-label">Won</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value" id="practiceStatsLost">0</span>
+              <span class="stat-label">Lost</span>
+            </div>
+          </div>
+
+          <div class="guess-distribution" id="practiceStatsGuessDistribution" aria-label="Practice guess distribution">
+          </div>
+        </section>
+      </div>
+
+      <div class="pill-actions postgame-actions">
+        <button type="button" class="pill-btn primary" id="closeStatsBtn">Close</button>
+      </div>
+    </div>
+  </div>
   <div class="modal-backdrop postgame-backdrop" id="postGameModal" data-open="false" aria-hidden="true">
     <div class="modal postgame-modal" role="dialog" aria-modal="true" aria-labelledby="postGameTitle"
       aria-describedby="postGameBody">
@@ -153,8 +274,46 @@
           <p class="postgame-intro-title" id="postGameIntroTitle"></p>
           <p class="postgame-text" id="postGameIntroText"></p>
         </section>
-      </div>
 
+        <section class="postgame-section trivia-section" id="postGameTriviaSection" hidden>
+          <p class="subtle-label">Book trivia</p>
+          <p class="postgame-intro-title" id="postGameTriviaTitle"></p>
+          <p class="postgame-text" id="postGameTriviaText"></p>
+          <div class="postgame-meta-chips" id="postGameTriviaChips"></div>
+        </section>
+
+        <section class="postgame-section stats-section" aria-label="Mode stats">
+          <p class="subtle-label" id="postGameStatsLabel">Stats</p>
+
+          <div class="stats-grid" id="postGameStatsGridPrimary">
+            <div class="stat-item">
+              <span class="stat-value" id="postGameStatsPlayed">0</span>
+              <span class="stat-label">Played</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value" id="postGameStatsWon">0</span>
+              <span class="stat-label">Won</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value" id="postGameStatsLost">0</span>
+              <span class="stat-label">Lost</span>
+            </div>
+          </div>
+
+          <div class="stats-grid stats-grid-secondary" id="postGameStatsGridSecondary">
+            <div class="stat-item" id="postGameCurrentStreakItem">
+              <span class="stat-value" id="postGameStatsCurrentStreak">0</span>
+              <span class="stat-label">Current streak</span>
+            </div>
+            <div class="stat-item" id="postGameBestStreakItem">
+              <span class="stat-value" id="postGameStatsBestStreak">0</span>
+              <span class="stat-label">Best streak</span>
+            </div>
+          </div>
+
+          <div class="guess-distribution" id="postGameGuessDistribution" aria-label="Guess distribution"></div>
+        </section>
+      </div>
       <div class="pill-actions postgame-actions">
         <button type="button" class="pill-btn" id="postGameCloseBtn">Close</button>
         <button type="button" class="pill-btn primary" id="postGameNextBtn" hidden>Next practice puzzle</button>

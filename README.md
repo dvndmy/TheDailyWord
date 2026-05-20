@@ -1,70 +1,57 @@
-# BIBDLE
+# Bibdle
 
-Bibdle is a browser-based Bible book guessing game inspired by Wordle, focused on the Catholic canon and designed as a teaching tool as well as a puzzle.
-
-The player is shown a Bible verse and must guess the correct book. Each guess reveals clues about the book’s testament, section, first letter, and how close it is in canonical order.
+Bibdle is a browser-based Bible book guessing game inspired by Wordle, built around the Catholic canon. Each puzzle shows a verse, and the player must identify the correct Bible book using feedback on testament, section, first letter, and canonical proximity.
 
 ## Features
 
-* **Daily puzzle mode** based on the current UTC date, with streak tracking and stats.
-* **Practice mode** for endless random puzzles that do not affect the daily streak.
-* **Difficulty modes** (Easy, Normal, Hard) that adjust guess limits and hint behavior.
-* **Autocomplete suggestions** while typing book names, with keyboard and screen-reader support.
-* **Feedback tiles** for:
-  * Testament
-  * Section
-  * First letter
-  * Canonical proximity and exact book match
-* **Textual proximity feedback** (exact, very close, near, far, wrong testament) under the grid.
-* **Light/dark theme toggle** that respects system preferences and remembers your choice.
-* **Post-game panel** showing the correct book, reference, full verse, explanation, and book intro.
-* **Share result button** that copies a summary of your game to the clipboard.
-* **Help modal** with instructions and accessibility-friendly status messages.
-* **Responsive layout** for mobile and desktop, including a mobile-friendly control layout.
+- Daily puzzle mode with streaks, stats, and archive progress
+- Practice mode with separate stats
+- Easy, Normal, and Hard difficulty modes
+- Autocomplete book search with keyboard support
+- Light/dark theme toggle
+- Accessibility settings for reduced motion, high contrast, and larger text
+- Post-game panel with verse explanation, book intro, trivia, and stats
+- Stats modal for historical progress and streak badges
+- Archive map showing Daily solved progress across the Catholic canon
+- Responsive layout for desktop and mobile
 
 ## How to Play
 
-1. Choose Daily or Practice mode and (optionally) select a difficulty.
-2. Read the verse shown on screen.
-3. Type the Bible book you think it comes from, or pick from the suggestions list.
-4. Use the feedback tiles and proximity text to narrow down the answer.
-5. Keep guessing until you find the correct book or run out of guesses (depending on difficulty).
-6. After the puzzle ends, review the explanation and book intro in the post-game panel.
+1. Choose Daily or Practice mode.
+2. Read the verse.
+3. Guess the Bible book.
+4. Use the clue tiles and proximity feedback to narrow the answer.
+5. Review the post-game explanation and stats when the puzzle ends.
 
-## Supported Books
+## Canon Coverage
 
-The game includes books from the Catholic canon:
-* Genesis through Revelation.
-* Deuterocanonical books such as Tobit, Judith, Wisdom, Sirach, Baruch, 1 Maccabees, and 2 Maccabees.
-* Book ordering, sections, and testaments are normalized so proximity feedback reflects the Catholic Bible’s structure.
+Bibdle uses the Catholic canon, including the Deuterocanonical books. Book order, sections, and testament groupings are normalized so clue feedback and archive progress follow Catholic Bible structure.
 
-## Technical Details
+## Accessibility
 
-Built as a small multi-file web app with semantic HTML, CSS, and vanilla JavaScript.
+Bibdle includes accessible modal dialogs, keyboard-friendly autocomplete, screen-reader-friendly status updates, and user-controlled visual preferences. Accessible dialogs should expose clear semantics and support keyboard dismissal, which matches the modal approach used here. [web:116][web:113]
 
-Uses separate modules for:
-* Core UI and game logic (`js/bibdle.js`)
-* Book metadata (`data/books.js`)
-* Verse pool and educational content (`data/verses.js`)
+## Tech Stack
 
-Central `CONFIG` object controls modes, guess limits, proximity bands, and storage keys.
+- Semantic HTML
+- CSS
+- Vanilla JavaScript
+- Local browser storage for progress, preferences, stats, and archive data across sessions [web:242][web:268]
 
-Uses `localStorage` to persist:
-* Current puzzle progress
-* Theme and mode preferences
-* Game stats and daily streaks
+## Project Structure
 
-Uses Google Fonts for typography.
-Includes keyboard- and screen-reader-friendly autocomplete and status messages via ARIA attributes.
-
-## File Structure
-
+```text
 bibdle/
-├── Bibdle.html        # Main HTML shell
+├── index.html
 ├── css/
-│   └── bibdle.css     # Styles for layout, themes, and animations
+│   └── bibdle.css
 ├── js/
-│   └── bibdle.js      # Game logic, state management, rendering, persistence
+│   └── bibdle.js
 └── data/
-    ├── books.js       # Catholic canon metadata (order, testament, sections, intros)
-    └── verses.js      # Verse pool with references, difficulty, explanations
+    ├── books.js
+    └── verses.js
+```
+
+## Notes
+
+The app is fully client-side and currently stores progress and stats locally in the browser using `localStorage`, which persists data across browser sessions for the same origin. [web:242]
