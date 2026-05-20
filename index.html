@@ -5,11 +5,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Bibdle</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
     href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap"
-    rel="stylesheet">
+    rel="stylesheet" />
   <link rel="stylesheet" href="./css/bibdle.css" />
 </head>
 
@@ -105,27 +105,23 @@
           <button type="button" class="pill-btn primary" id="nextPracticeBtn" hidden>Next practice puzzle</button>
         </div>
 
-        <p class="footer-note">A Wordle-style game that asks you to identify the Bible book from its verse, testament,
-          section, and first-letter clues.</p>
+        <p class="footer-note">A Wordle-style game that asks you to identify the Bible book from its verse, testament, section, and first-letter clues.</p>
       </section>
-
     </section>
   </main>
 
   <div class="modal-backdrop" id="helpModal" data-open="false" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
       <h2 id="helpTitle">How to play</h2>
-      <p>Read the verse, then guess the Bible book it comes from. Each guess reveals whether your choice matches the
-        correct testament, section, first letter, and the book itself.</p>
+      <p>Read the verse, then guess the Bible book it comes from. Each guess reveals whether your choice matches the correct testament, section, first letter, and the book itself.</p>
       <ul>
         <li>You can type part of a book name and choose from the suggestion list.</li>
-        <li>Green means exact match, gold means you are near the right book in canonical order, and red means that clue
-          is wrong.</li>
+        <li>Green means exact match, gold means you are near the right book in canonical order, and red means that clue is wrong.</li>
         <li>Daily gives one deterministic puzzle based on the date, while Practice gives random verses from the pool.
         </li>
         <li>Only Daily mode counts toward daily streaks and recorded stats.</li>
       </ul>
-      <div class="pill-actions" style="justify-content:flex-end;">
+      <div class="pill-actions modal-actions-end">
         <button type="button" class="pill-btn primary" id="closeHelpBtn">Close</button>
       </div>
     </div>
@@ -156,7 +152,7 @@
         </label>
       </div>
 
-      <div class="pill-actions" style="justify-content:flex-end;">
+      <div class="pill-actions modal-actions-end">
         <button type="button" class="pill-btn primary" id="closeSettingsBtn">Close</button>
       </div>
     </div>
@@ -167,7 +163,7 @@
       <h2 id="statsTitle">Historical stats</h2>
 
       <div class="postgame-body" id="statsBody">
-        <section class="postgame-section stats-section" role="region" aria-label="Historical stats">
+        <section class="postgame-section stats-section" aria-label="Historical stats">
           <p class="subtle-label">Daily mode</p>
 
           <div class="stats-grid">
@@ -197,11 +193,10 @@
           </div>
 
           <div class="guess-distribution" id="statsGuessDistribution" aria-label="Guess distribution"></div>
-          <section class="stats-section">
+          <div class="postgame-section stats-section">
             <p class="subtle-label">Badges</p>
             <div class="streak-badges" id="statsModalBadges"></div>
-
-          </section>
+          </div>
         </section>
       </div>
 
@@ -244,8 +239,12 @@
           <p class="postgame-text" id="postGameTriviaText"></p>
           <div class="postgame-meta-chips" id="postGameTriviaChips"></div>
         </section>
+
+        <section class="postgame-section stats-section" aria-label="Streak badges">
+          <p class="subtle-label">Badges</p>
+          <div class="streak-badges" id="streakBadges"></div>
+        </section>
       </div>
-      <div class="streak-badges" id="streakBadges"></div>
       <div class="pill-actions postgame-actions">
         <button type="button" class="pill-btn" id="postGameCloseBtn">Close</button>
         <button type="button" class="pill-btn primary" id="postGameNextBtn" hidden>Next practice puzzle</button>

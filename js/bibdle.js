@@ -53,12 +53,14 @@ const CONFIG = {
     stats: "bibdle-stats",
   },
 };
+
 const STREAK_BADGES = [
   { id: "streak-3", threshold: 3, label: "3-Day Streak" },
   { id: "streak-7", threshold: 7, label: "7-Day Streak" },
   { id: "streak-14", threshold: 14, label: "14-Day Streak" },
   { id: "streak-30", threshold: 30, label: "30-Day Streak" },
 ];
+
 const state = {
   mode: "daily",
   currentPuzzle: null,
@@ -67,6 +69,8 @@ const state = {
   selectedSuggestionIndex: -1,
   currentSuggestions: [],
   postGameOpen: false,
+  countdownIntervalId: null,
+  countdownTimeoutId: null,
   preferences: {
     theme: "dark",
     difficulty: "normal",
@@ -100,14 +104,37 @@ const elements = {
   guessRows: document.getElementById("guessRows"),
   proximityLine: document.getElementById("proximityLine"),
   statusLine: document.getElementById("statusLine"),
+
   helpBtn: document.getElementById("helpBtn"),
   shareBtn: document.getElementById("shareBtn"),
   nextPracticeBtn: document.getElementById("nextPracticeBtn"),
-  helpModal: document.getElementById("helpModal"),
-  closeHelpBtn: document.getElementById("closeHelpBtn"),
+  settingsBtn: document.getElementById("settingsBtn"),
+  statsBtn: document.getElementById("statsBtn"),
+
   difficultySelect: document.getElementById("difficultySelect"),
   modeSelect: document.getElementById("modeSelect"),
   themeToggle: document.querySelector("[data-theme-toggle]"),
+
+  helpModal: document.getElementById("helpModal"),
+  closeHelpBtn: document.getElementById("closeHelpBtn"),
+
+  settingsModal: document.getElementById("settingsModal"),
+  closeSettingsBtn: document.getElementById("closeSettingsBtn"),
+  reducedMotionToggle: document.getElementById("reducedMotionToggle"),
+  highContrastToggle: document.getElementById("highContrastToggle"),
+  largeTextToggle: document.getElementById("largeTextToggle"),
+  soundToggle: document.getElementById("soundToggle"),
+
+  statsModal: document.getElementById("statsModal"),
+  closeStatsBtn: document.getElementById("closeStatsBtn"),
+  statsPlayed: document.getElementById("statsPlayed"),
+  statsWon: document.getElementById("statsWon"),
+  statsLost: document.getElementById("statsLost"),
+  statsCurrentStreak: document.getElementById("statsCurrentStreak"),
+  statsBestStreak: document.getElementById("statsBestStreak"),
+  statsGuessDistribution: document.getElementById("statsGuessDistribution"),
+  statsModalBadges: document.getElementById("statsModalBadges"),
+
   postGameModal: document.getElementById("postGameModal"),
   postGameTitle: document.getElementById("postGameTitle"),
   postGameBadge: document.getElementById("postGameBadge"),
@@ -119,36 +146,11 @@ const elements = {
   postGameIntroText: document.getElementById("postGameIntroText"),
   postGameCloseBtn: document.getElementById("postGameCloseBtn"),
   postGameNextBtn: document.getElementById("postGameNextBtn"),
-  postGameStatsPlayed: document.getElementById("postGameStatsPlayed"),
-  postGameStatsWon: document.getElementById("postGameStatsWon"),
-  postGameStatsLost: document.getElementById("postGameStatsLost"),
-  postGameStatsCurrentStreak: document.getElementById("postGameStatsCurrentStreak"),
-  postGameStatsBestStreak: document.getElementById("postGameStatsBestStreak"),
-  postGameGuessDistribution: document.getElementById("postGameGuessDistribution"),
-  postGameStreakChips: document.getElementById("postGameStreakChips"),
-  settingsBtn: document.getElementById("settingsBtn"),
-  settingsModal: document.getElementById("settingsModal"),
-  closeSettingsBtn: document.getElementById("closeSettingsBtn"),
-  reducedMotionToggle: document.getElementById("reducedMotionToggle"),
-  highContrastToggle: document.getElementById("highContrastToggle"),
-  largeTextToggle: document.getElementById("largeTextToggle"),
-  soundToggle: document.getElementById("soundToggle"),
-  statsBtn: document.getElementById("statsBtn"),
-  statsModal: document.getElementById("statsModal"),
-  closeStatsBtn: document.getElementById("closeStatsBtn"),
-  statsPlayed: document.getElementById("statsPlayed"),
-  statsWon: document.getElementById("statsWon"),
-  statsLost: document.getElementById("statsLost"),
-  statsCurrentStreak: document.getElementById("statsCurrentStreak"),
-  statsBestStreak: document.getElementById("statsBestStreak"),
-  statsGuessDistribution: document.getElementById("statsGuessDistribution"),
-  statsStreakChips: document.getElementById("statsStreakChips"),
   postGameTriviaSection: document.getElementById("postGameTriviaSection"),
   postGameTriviaTitle: document.getElementById("postGameTriviaTitle"),
   postGameTriviaText: document.getElementById("postGameTriviaText"),
   postGameTriviaChips: document.getElementById("postGameTriviaChips"),
   streakBadges: document.getElementById("streakBadges"),
-  statsModalBadges: document.getElementById("statsModalBadges"),
 };
 
 function getSystemTheme() {
@@ -173,6 +175,7 @@ function getPuzzleById(id) {
 function getBookDistance(a, b) {
   const bookA = typeof a === "string" ? getBookByName(a) : a;
   const bookB = typeof b === "string" ? getBookByName(b) : b;
+
   if (!bookA || !bookB) return null;
   return Math.abs(bookA.order - bookB.order);
 }
@@ -180,6 +183,7 @@ function getBookDistance(a, b) {
 function isSameSection(a, b) {
   const bookA = typeof a === "string" ? getBookByName(a) : a;
   const bookB = typeof b === "string" ? getBookByName(b) : b;
+
   if (!bookA || !bookB) return false;
   return bookA.sectionKey === bookB.sectionKey;
 }
@@ -195,13 +199,16 @@ function getProximityLabel(distance, sameTestament = true) {
 
 function getProximityDescription(guess) {
   if (!guess) return "";
+
   const descriptions = {
     exact: `${guess.book} is exactly the right book in canon order.`,
     "very close": `${guess.book} is very close to the target in canon order.`,
     near: `${guess.book} is near the target in canon order.`,
     far: `${guess.book} is still far from the target in canon order.`,
-    "wrong testament": `${guess.book} is in the wrong testament, so the target is on the other side of the Bible.`,
+    "wrong testament":
+      `${guess.book} is in the wrong testament, so the target is on the other side of the Bible.`,
   };
+
   return descriptions[guess.proximity] ?? "";
 }
 
@@ -221,19 +228,20 @@ function getPreviousDate(dateString) {
 
 function getDailyIndex() {
   const now = new Date();
-  const y = now.getUTCFullYear();
-  const m = now.getUTCMonth();
-  const d = now.getUTCDate();
   const epoch = Date.UTC(
     CONFIG.daily.epochYear,
     CONFIG.daily.epochMonth,
     CONFIG.daily.epochDay,
   );
-  const current = Date.UTC(y, m, d);
+  const current = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+  );
+
   return (
-    ((Math.floor((current - epoch) / 86400000) % verses.length) +
-      verses.length) %
-    verses.length
+    ((Math.floor((current - epoch) / 86400000) % verses.length) + verses.length)
+    % verses.length
   );
 }
 
@@ -262,9 +270,11 @@ function formatTime(leftMs) {
   if (hours > 0) {
     return `${hours}h ${minutes}m ${seconds}s`;
   }
+
   if (minutes > 0) {
     return `${minutes}m ${seconds}s`;
   }
+
   return `${Math.max(seconds, 0)}s`;
 }
 
@@ -273,6 +283,7 @@ function stopCountdownTimer() {
     clearInterval(state.countdownIntervalId);
     state.countdownIntervalId = null;
   }
+
   if (state.countdownTimeoutId) {
     clearTimeout(state.countdownTimeoutId);
     state.countdownTimeoutId = null;
@@ -281,6 +292,7 @@ function stopCountdownTimer() {
 
 function scheduleDailyReset() {
   if (state.countdownTimeoutId) return;
+
   state.countdownTimeoutId = window.setTimeout(() => {
     state.countdownTimeoutId = null;
     resetPuzzle("daily");
@@ -328,13 +340,16 @@ function startCountdownTimer() {
 }
 
 function pickPuzzle(mode = "daily") {
-  if (mode === "practice")
+  if (mode === "practice") {
     return verses[Math.floor(Math.random() * verses.length)];
+  }
+
   return verses[getDailyIndex()];
 }
 
 function buildCurrentPuzzle(mode = "daily") {
   const puzzle = pickPuzzle(mode);
+
   return {
     id: puzzle.id,
     date: mode === "daily" ? getTodayPuzzleDate() : null,
@@ -372,9 +387,9 @@ function canRestoreSavedPracticePuzzle(saved) {
 }
 
 function restoreDraftInput(saved) {
-  const draft = typeof saved?.inputDraft === "string" ? saved.inputDraft : "";
   if (!elements.guessInput) return;
-  elements.guessInput.value = draft;
+  elements.guessInput.value =
+    typeof saved?.inputDraft === "string" ? saved.inputDraft : "";
 }
 
 function saveProgress() {
@@ -444,6 +459,7 @@ function loadProgress() {
     restoreDraftInput(saved);
     resetSuggestionsState();
     closeSuggestions();
+
     return true;
   } catch {
     clearSavedProgress();
@@ -461,6 +477,7 @@ function savePreferences() {
     highContrast: state.preferences.highContrast,
     largeText: state.preferences.largeText,
   };
+
   try {
     localStorage.setItem(
       CONFIG.storageKeys.preferences,
@@ -479,14 +496,18 @@ function loadPreferences() {
     highContrast: false,
     largeText: false,
   };
+
   try {
     const raw = localStorage.getItem(CONFIG.storageKeys.preferences);
+
     if (!raw) {
       state.preferences = defaults;
       state.mode = defaults.preferredMode;
       return;
     }
+
     const saved = JSON.parse(raw);
+
     state.preferences = {
       theme:
         saved?.theme === "light" || saved?.theme === "dark"
@@ -517,6 +538,7 @@ function loadPreferences() {
   } catch {
     state.preferences = defaults;
   }
+
   state.mode = state.preferences.preferredMode;
 }
 
@@ -533,6 +555,7 @@ function saveStats() {
       ? state.stats.earnedBadges
       : [],
   };
+
   try {
     localStorage.setItem(CONFIG.storageKeys.stats, JSON.stringify(payload));
   } catch { }
@@ -549,13 +572,17 @@ function loadStats() {
     lastDailySolvedDate: null,
     earnedBadges: [],
   };
+
   try {
     const raw = localStorage.getItem(CONFIG.storageKeys.stats);
+
     if (!raw) {
       state.stats = defaults;
       return;
     }
+
     const saved = JSON.parse(raw);
+
     state.stats = {
       played:
         Number.isInteger(saved?.played) && saved.played >= 0
@@ -588,12 +615,11 @@ function loadStats() {
           saved?.lastDailySolvedDate === null
           ? saved.lastDailySolvedDate
           : defaults.lastDailySolvedDate,
-      earnedBadges:
-        Array.isArray(saved?.earnedBadges)
-          ? saved.earnedBadges.filter((badgeId) =>
-            STREAK_BADGES.some((badge) => badge.id === badgeId),
-          )
-          : defaults.earnedBadges,
+      earnedBadges: Array.isArray(saved?.earnedBadges)
+        ? saved.earnedBadges.filter((badgeId) =>
+          STREAK_BADGES.some((badge) => badge.id === badgeId),
+        )
+        : defaults.earnedBadges,
     };
   } catch {
     state.stats = defaults;
@@ -604,8 +630,43 @@ function hasRecordedDailyResult(date) {
   return state.stats.lastDailySolvedDate === date;
 }
 
+function getEarnedBadgeIds() {
+  return Array.isArray(state.stats?.earnedBadges) ? state.stats.earnedBadges : [];
+}
+
+function computeNewlyEarnedBadges() {
+  const earnedBadgeIds = new Set(getEarnedBadgeIds());
+  const currentStreak =
+    Number.isInteger(state.stats?.currentStreak) && state.stats.currentStreak >= 0
+      ? state.stats.currentStreak
+      : 0;
+
+  return STREAK_BADGES.filter(
+    (badge) => currentStreak >= badge.threshold && !earnedBadgeIds.has(badge.id),
+  );
+}
+
+function awardStreakBadges() {
+  const existing = [...getEarnedBadgeIds()];
+  const existingSet = new Set(existing);
+  const newlyEarned = computeNewlyEarnedBadges();
+
+  if (!newlyEarned.length) return [];
+
+  newlyEarned.forEach((badge) => {
+    if (!existingSet.has(badge.id)) {
+      existing.push(badge.id);
+      existingSet.add(badge.id);
+    }
+  });
+
+  state.stats.earnedBadges = existing;
+  return newlyEarned;
+}
+
 function recordPuzzleCompletion(outcome) {
   if (!state.currentPuzzle || state.currentPuzzle.mode !== "daily") return;
+
   const completionDate = state.currentPuzzle.date;
   if (completionDate && hasRecordedDailyResult(completionDate)) return;
 
@@ -613,12 +674,14 @@ function recordPuzzleCompletion(outcome) {
 
   if (outcome === "won") {
     state.stats.won += 1;
+
     const guessCount = state.guesses.length;
     state.stats.guessDistribution[guessCount] =
       (state.stats.guessDistribution[guessCount] ?? 0) + 1;
 
     if (completionDate) {
       const previousDate = getPreviousDate(completionDate);
+
       state.stats.currentStreak =
         state.stats.lastDailySolvedDate === previousDate
           ? state.stats.currentStreak + 1
@@ -628,12 +691,14 @@ function recordPuzzleCompletion(outcome) {
         state.stats.bestStreak,
         state.stats.currentStreak,
       );
+
       state.stats.lastDailySolvedDate = completionDate;
     }
 
     awardStreakBadges();
   } else if (outcome === "lost") {
     state.stats.lost += 1;
+
     if (completionDate) {
       state.stats.currentStreak = 0;
       state.stats.lastDailySolvedDate = completionDate;
@@ -651,51 +716,16 @@ function applyTheme(theme) {
 function renderThemeToggle() {
   const toggle = elements.themeToggle;
   if (!toggle) return;
+
   toggle.innerHTML =
     state.preferences.theme === "dark"
       ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="5"></circle><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path></svg>'
       : '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>';
+
   toggle.setAttribute(
     "aria-label",
-    "Switch to " +
-    (state.preferences.theme === "dark" ? "light" : "dark") +
-    " mode",
+    `Switch to ${state.preferences.theme === "dark" ? "light" : "dark"} mode`,
   );
-}
-
-function canChangeDifficulty() {
-  return state.guesses.length === 0 && state.status === "playing";
-}
-
-function syncPreferenceControls() {
-  if (elements.difficultySelect) {
-    elements.difficultySelect.value = state.preferences.difficulty;
-    elements.difficultySelect.disabled = !canChangeDifficulty();
-    elements.difficultySelect.setAttribute(
-      "aria-disabled",
-      String(!canChangeDifficulty()),
-    );
-    elements.difficultySelect.title = canChangeDifficulty()
-      ? "Choose difficulty before your first guess."
-      : "Difficulty can only be changed before starting a puzzle.";
-  }
-  if (elements.modeSelect) {
-    elements.modeSelect.value = state.mode;
-    elements.modeSelect.disabled = false;
-    elements.modeSelect.setAttribute("aria-disabled", "false");
-    elements.modeSelect.title = "Switch between Daily and Practice mode.";
-  }
-}
-
-function syncActionButtons() {
-  if (elements.nextPracticeBtn) {
-    const showNextPractice = state.mode === "practice" && isGameOver();
-    elements.nextPracticeBtn.hidden = !showNextPractice;
-  }
-
-  if (elements.statsBtn) {
-    elements.statsBtn.hidden = state.mode !== "daily";
-  }
 }
 
 function initTheme() {
@@ -714,15 +744,13 @@ function formatDate() {
 
 function getMaxGuesses() {
   return (
-    CONFIG.modes[state.preferences.difficulty]?.maxGuesses ??
-    CONFIG.modes.normal.maxGuesses
+    CONFIG.modes[state.preferences.difficulty]?.maxGuesses
+    ?? CONFIG.modes.normal.maxGuesses
   );
 }
+
 function getCurrentModeConfig() {
-  return (
-    CONFIG.modes[state.preferences.difficulty] ??
-    CONFIG.modes.normal
-  );
+  return CONFIG.modes[state.preferences.difficulty] ?? CONFIG.modes.normal;
 }
 
 function getHintSchedule() {
@@ -733,8 +761,13 @@ function getHintSchedule() {
     referenceAt: 6,
   };
 }
+
 function isGameOver() {
   return state.status === "won" || state.status === "lost";
+}
+
+function canChangeDifficulty() {
+  return state.guesses.length === 0 && state.status === "playing";
 }
 
 function getHintLines() {
@@ -763,15 +796,15 @@ function getHintLines() {
     guessCount >= schedule.referenceAt;
 
   if (shouldRevealTestament) {
-    lines.push("It is in the " + target.testament + " Testament.");
+    lines.push(`It is in the ${target.testament} Testament.`);
   }
 
   if (shouldRevealSection) {
-    lines.push("It is in the " + target.section + " section.");
+    lines.push(`It is in the ${target.section} section.`);
   }
 
   if (shouldRevealFirstLetter) {
-    lines.push("Its first letter is " + target.firstLetter + ".");
+    lines.push(`Its first letter is ${target.firstLetter}.`);
   } else if (guessCount === 0) {
     if (difficulty === "easy") {
       lines.push("The first letter will appear soon.");
@@ -789,8 +822,12 @@ function getHintLines() {
   }
 
   if (shouldRevealReference) {
-    lines.push("Reference: " + state.currentPuzzle.verse.reference + ".");
-  } else if (difficulty === "hard" && schedule.referenceAt === null && guessCount > 0) {
+    lines.push(`Reference: ${state.currentPuzzle.verse.reference}.`);
+  } else if (
+    difficulty === "hard" &&
+    schedule.referenceAt === null &&
+    guessCount > 0
+  ) {
     lines.push("No reference hint is available in Hard mode.");
   }
 
@@ -800,10 +837,13 @@ function getHintLines() {
 function compareGuess(guessName) {
   const target = getBookByName(state.currentPuzzle?.verse.book);
   const guess = getBookByName(guessName);
+
   if (!target || !guess) return null;
+
   const distance = getBookDistance(target, guess);
   const sameTestament = guess.testament === target.testament;
   const proximity = getProximityLabel(distance, sameTestament);
+
   return {
     book: guess.name,
     distance,
@@ -844,6 +884,39 @@ function getAttemptLabel() {
   return "Guess again";
 }
 
+function syncPreferenceControls() {
+  const allowDifficultyChange = canChangeDifficulty();
+
+  if (elements.difficultySelect) {
+    elements.difficultySelect.value = state.preferences.difficulty;
+    elements.difficultySelect.disabled = !allowDifficultyChange;
+    elements.difficultySelect.setAttribute(
+      "aria-disabled",
+      String(!allowDifficultyChange),
+    );
+    elements.difficultySelect.title = allowDifficultyChange
+      ? "Choose difficulty before your first guess."
+      : "Difficulty can only be changed before starting a puzzle.";
+  }
+
+  if (elements.modeSelect) {
+    elements.modeSelect.value = state.mode;
+    elements.modeSelect.disabled = false;
+    elements.modeSelect.setAttribute("aria-disabled", "false");
+    elements.modeSelect.title = "Switch between Daily and Practice mode.";
+  }
+}
+
+function syncActionButtons() {
+  if (elements.nextPracticeBtn) {
+    elements.nextPracticeBtn.hidden = !(state.mode === "practice" && isGameOver());
+  }
+
+  if (elements.statsBtn) {
+    elements.statsBtn.hidden = state.mode !== "daily";
+  }
+}
+
 function renderPuzzleCard() {
   elements.verseText.textContent = state.currentPuzzle?.verse.text ?? "";
   elements.dateLabel.textContent =
@@ -853,20 +926,24 @@ function renderPuzzleCard() {
 
   if (state.mode === "daily") {
     startCountdownTimer();
-  } else {
-    stopCountdownTimer();
-    if (elements.countdownTimer?.parentElement) {
-      elements.countdownTimer.parentElement.classList.add("hidden");
-      elements.countdownTimer.parentElement.classList.add("is-muted");
-    }
+    return;
+  }
+
+  stopCountdownTimer();
+
+  if (elements.countdownTimer?.parentElement) {
+    elements.countdownTimer.parentElement.classList.add("hidden");
+    elements.countdownTimer.parentElement.classList.add("is-muted");
   }
 }
 
 function renderHintBlock() {
   const lines = getHintLines();
+
   elements.hintBlock.innerHTML = lines
     .map((line) => `<p class="meta-line">${line}</p>`)
     .join("");
+
   elements.attemptLabel.textContent = getAttemptLabel();
 }
 
@@ -883,9 +960,10 @@ function renderEmptyGuessRows() {
 
 function renderGuessRow(guess, rowIndex, animate = false) {
   const baseDelay = animate ? rowIndex * 200 : 0;
+
   return `
     <div class="guess-grid" aria-label="Guess ${guess.book}">
-      <div class="guess-card ${guess.testament.state}${animate ? " reveal-animate" : ""}" style="--reveal-delay: ${baseDelay + 0}ms">${guess.testament.value}</div>
+      <div class="guess-card ${guess.testament.state}${animate ? " reveal-animate" : ""}" style="--reveal-delay: ${baseDelay}ms">${guess.testament.value}</div>
       <div class="guess-card ${guess.section.state}${animate ? " reveal-animate" : ""}" style="--reveal-delay: ${baseDelay + 180}ms">${guess.section.value}</div>
       <div class="guess-card ${guess.firstLetter.state}${animate ? " reveal-animate" : ""}" style="--reveal-delay: ${baseDelay + 360}ms">${guess.firstLetter.value}</div>
       <div class="guess-card ${guess.bookResult.state}${animate ? " reveal-animate" : ""}" style="--reveal-delay: ${baseDelay + 540}ms">${guess.bookResult.value}</div>
@@ -913,6 +991,7 @@ function renderGuessRows(animateLatest = false) {
 
 function renderProximityLine() {
   if (!elements.proximityLine) return;
+
   const lastGuess = state.guesses[state.guesses.length - 1];
   elements.proximityLine.textContent = getProximityDescription(lastGuess);
 }
@@ -920,38 +999,100 @@ function renderProximityLine() {
 function renderStatus(message = "Guess the book from the verse above.") {
   elements.statusLine.textContent = message;
 }
-function getEarnedBadgeIds() {
-  return Array.isArray(state.stats?.earnedBadges) ? state.stats.earnedBadges : [];
-}
 
-function computeNewlyEarnedBadges() {
-  const earnedBadgeIds = new Set(getEarnedBadgeIds());
+function computeStatsSummary() {
+  const stats = state.stats ?? {};
+  const played =
+    Number.isInteger(stats.played) && stats.played >= 0 ? stats.played : 0;
+  const won = Number.isInteger(stats.won) && stats.won >= 0 ? stats.won : 0;
+  const lost =
+    Number.isInteger(stats.lost) && stats.lost >= 0 ? stats.lost : 0;
   const currentStreak =
-    Number.isInteger(state.stats?.currentStreak) && state.stats.currentStreak >= 0
-      ? state.stats.currentStreak
+    Number.isInteger(stats.currentStreak) && stats.currentStreak >= 0
+      ? stats.currentStreak
+      : 0;
+  const bestStreak =
+    Number.isInteger(stats.bestStreak) && stats.bestStreak >= 0
+      ? stats.bestStreak
       : 0;
 
-  return STREAK_BADGES.filter(
-    (badge) => currentStreak >= badge.threshold && !earnedBadgeIds.has(badge.id),
-  );
+  const source =
+    stats.guessDistribution &&
+      typeof stats.guessDistribution === "object" &&
+      !Array.isArray(stats.guessDistribution)
+      ? stats.guessDistribution
+      : {};
+
+  const guessDistribution = {};
+  for (let i = 1; i <= 8; i += 1) {
+    const value = source[i] ?? source[String(i)] ?? 0;
+    guessDistribution[i] =
+      Number.isInteger(value) && value >= 0 ? value : 0;
+  }
+
+  return {
+    played,
+    won,
+    lost,
+    currentStreak,
+    bestStreak,
+    guessDistribution,
+  };
 }
 
-function awardStreakBadges() {
-  const existing = getEarnedBadgeIds();
-  const existingSet = new Set(existing);
-  const newlyEarned = computeNewlyEarnedBadges();
+function renderStatsSection(statsObj, container) {
+  if (!container) return;
 
-  if (!newlyEarned.length) return [];
+  const safeStats = statsObj ?? computeStatsSummary();
+  const totalWins = safeStats.won;
+  const guessKeys = Object.keys(safeStats.guessDistribution || {})
+    .map(Number)
+    .sort((a, b) => a - b);
 
-  newlyEarned.forEach((badge) => {
-    if (!existingSet.has(badge.id)) {
-      existing.push(badge.id);
-      existingSet.add(badge.id);
-    }
+  const maxCount = guessKeys.reduce(
+    (max, key) => Math.max(max, safeStats.guessDistribution[key] || 0),
+    0,
+  );
+
+  container.innerHTML = "";
+
+  if (safeStats.played <= 0 && totalWins <= 0 && safeStats.lost <= 0) {
+    const empty = document.createElement("p");
+    empty.className = "dist-empty";
+    empty.textContent = "No stats yet";
+    container.appendChild(empty);
+    return;
+  }
+
+  guessKeys.forEach((attempt) => {
+    const count = safeStats.guessDistribution[attempt] || 0;
+
+    const row = document.createElement("div");
+    row.className = "dist-row";
+
+    const label = document.createElement("div");
+    label.className = "dist-label";
+    label.textContent = `${attempt}`;
+    label.setAttribute("aria-label", `Guess distribution, ${attempt} attempts`);
+
+    const track = document.createElement("div");
+    track.className = "dist-track";
+
+    const bar = document.createElement("div");
+    bar.className = "dist-bar";
+    bar.style.width = `${maxCount > 0 ? Math.max((count / maxCount) * 100, count > 0 ? 8 : 0) : 0}%`;
+    bar.setAttribute("aria-hidden", "true");
+    track.appendChild(bar);
+
+    const value = document.createElement("div");
+    value.className = "dist-count";
+    value.textContent = String(count);
+
+    row.appendChild(label);
+    row.appendChild(track);
+    row.appendChild(value);
+    container.appendChild(row);
   });
-
-  state.stats.earnedBadges = existing;
-  return newlyEarned;
 }
 
 function renderEarnedBadges(container) {
@@ -979,93 +1120,14 @@ function renderEarnedBadges(container) {
   if (!getEarnedBadgeIds().length) {
     container.insertAdjacentHTML(
       "beforeend",
-      `<p class="streak-badges-empty">\nNo streak badges yet — keep your Daily Win streak going.</p>`,
+      `<p class="streak-badges-empty">No streak badges yet — keep your Daily win streak going.</p>`,
     );
   }
 }
-function computeStatsSummary() {
-  const stats = state.stats ?? {};
-  const played = Number.isInteger(stats.played) && stats.played >= 0 ? stats.played : 0;
-  const won = Number.isInteger(stats.won) && stats.won >= 0 ? stats.won : 0;
-  const lost = Number.isInteger(stats.lost) && stats.lost >= 0 ? stats.lost : 0;
-  const currentStreak = Number.isInteger(stats.currentStreak) && stats.currentStreak >= 0 ? stats.currentStreak : 0;
-  const bestStreak = Number.isInteger(stats.bestStreak) && stats.bestStreak >= 0 ? stats.bestStreak : 0;
-  const guessDistribution = {};
-  const source = stats.guessDistribution && typeof stats.guessDistribution === "object" && !Array.isArray(stats.guessDistribution)
-    ? stats.guessDistribution
-    : {};
 
-  for (let i = 1; i <= 8; i += 1) {
-    const value = source[i] ?? source[String(i)] ?? 0;
-    guessDistribution[i] = Number.isInteger(value) && value >= 0 ? value : 0;
-  }
-
-  return {
-    played,
-    won,
-    lost,
-    currentStreak,
-    bestStreak,
-    guessDistribution,
-  };
-}
-
-function renderStatsSection(statsObj, container) {
-  if (!container) return;
-
-  const safeStats = statsObj ?? computeStatsSummary();
-  const totalWins = safeStats.won;
-  const guessKeys = Object.keys(safeStats.guessDistribution || {}).map(Number).sort((a, b) => a - b);
-  const maxCount = guessKeys.reduce((max, key) => Math.max(max, safeStats.guessDistribution[key] || 0), 0);
-
-  if (elements.postGameStatsPlayed) elements.postGameStatsPlayed.textContent = String(safeStats.played);
-  if (elements.postGameStatsWon) elements.postGameStatsWon.textContent = String(safeStats.won);
-  if (elements.postGameStatsLost) elements.postGameStatsLost.textContent = String(safeStats.lost);
-  if (elements.postGameStatsCurrentStreak) elements.postGameStatsCurrentStreak.textContent = String(safeStats.currentStreak);
-  if (elements.postGameStatsBestStreak) elements.postGameStatsBestStreak.textContent = String(safeStats.bestStreak);
-
-  container.innerHTML = "";
-
-  if (safeStats.played <= 0 && totalWins <= 0 && safeStats.lost <= 0) {
-    const empty = document.createElement("p");
-    empty.className = "dist-empty";
-    empty.textContent = "No stats yet";
-    container.appendChild(empty);
-    return;
-  }
-
-  guessKeys.forEach((attempt) => {
-    const count = safeStats.guessDistribution[attempt] || 0;
-    const row = document.createElement("div");
-    row.className = "dist-row";
-
-    const label = document.createElement("div");
-    label.className = "dist-label";
-    label.textContent = `${attempt}`;
-    label.setAttribute("aria-label", `Guess distribution, ${attempt} attempts`);
-
-    const track = document.createElement("div");
-    track.className = "dist-track";
-
-    const bar = document.createElement("div");
-    bar.className = "dist-bar";
-    const width = maxCount > 0 ? Math.max((count / maxCount) * 100, count > 0 ? 8 : 0) : 0;
-    bar.style.width = `${width}%`;
-    bar.setAttribute("aria-hidden", "true");
-    track.appendChild(bar);
-
-    const value = document.createElement("div");
-    value.className = "dist-count";
-    value.textContent = String(count);
-
-    row.appendChild(label);
-    row.appendChild(track);
-    row.appendChild(value);
-    container.appendChild(row);
-  });
-}
 function formatTriviaLabel(value) {
   if (!value) return "";
+
   return String(value)
     .split("-")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
@@ -1120,12 +1182,14 @@ function buildTriviaContent(puzzle, book) {
       .slice(0, 3)
       .map(formatTriviaLabel)
       .join(", ");
+
     textParts.push(`${book.name} often emphasizes themes such as ${themeText}.`);
   } else if (verseThemes.length) {
     const verseThemeText = verseThemes
       .slice(0, 3)
       .map(formatTriviaLabel)
       .join(", ");
+
     textParts.push(`This verse highlights themes such as ${verseThemeText}.`);
   }
 
@@ -1149,11 +1213,18 @@ function buildTriviaContent(puzzle, book) {
 }
 
 function renderTriviaSection(content) {
+  const {
+    postGameTriviaSection,
+    postGameTriviaTitle,
+    postGameTriviaText,
+    postGameTriviaChips,
+  } = elements;
+
   if (
-    !elements.postGameTriviaSection ||
-    !elements.postGameTriviaTitle ||
-    !elements.postGameTriviaText ||
-    !elements.postGameTriviaChips
+    !postGameTriviaSection ||
+    !postGameTriviaTitle ||
+    !postGameTriviaText ||
+    !postGameTriviaChips
   ) {
     return;
   }
@@ -1163,24 +1234,25 @@ function renderTriviaSection(content) {
   const hasChips = Array.isArray(content?.chips) && content.chips.length > 0;
 
   if (!hasTitle && !hasText && !hasChips) {
-    elements.postGameTriviaSection.hidden = true;
-    elements.postGameTriviaTitle.textContent = "";
-    elements.postGameTriviaText.textContent = "";
-    elements.postGameTriviaChips.innerHTML = "";
+    postGameTriviaSection.hidden = true;
+    postGameTriviaTitle.textContent = "";
+    postGameTriviaText.textContent = "";
+    postGameTriviaChips.innerHTML = "";
     return;
   }
 
-  elements.postGameTriviaSection.hidden = false;
-  elements.postGameTriviaTitle.textContent = content.title || "Learn more";
-  elements.postGameTriviaText.textContent = content.text || "";
-
-  elements.postGameTriviaChips.innerHTML = (content.chips || [])
+  postGameTriviaSection.hidden = false;
+  postGameTriviaTitle.textContent = content.title || "Learn more";
+  postGameTriviaText.textContent = content.text || "";
+  postGameTriviaChips.innerHTML = (content.chips || [])
     .map((chip) => `<span class="postgame-chip">${chip}</span>`)
     .join("");
 }
+
 function getPostGameContent() {
   const puzzle = state.currentPuzzle?.verse;
   if (!puzzle) return null;
+
   const book = getBookByName(puzzle.book);
 
   return {
@@ -1197,8 +1269,35 @@ function getPostGameContent() {
   };
 }
 
+function renderStatsModal() {
+  const statsObj = computeStatsSummary();
+
+  if (elements.statsPlayed) {
+    elements.statsPlayed.textContent = String(statsObj.played);
+  }
+  if (elements.statsWon) {
+    elements.statsWon.textContent = String(statsObj.won);
+  }
+  if (elements.statsLost) {
+    elements.statsLost.textContent = String(statsObj.lost);
+  }
+  if (elements.statsCurrentStreak) {
+    elements.statsCurrentStreak.textContent = String(statsObj.currentStreak);
+  }
+  if (elements.statsBestStreak) {
+    elements.statsBestStreak.textContent = String(statsObj.bestStreak);
+  }
+  if (elements.statsGuessDistribution) {
+    renderStatsSection(statsObj, elements.statsGuessDistribution);
+  }
+  if (elements.statsModalBadges) {
+    renderEarnedBadges(elements.statsModalBadges);
+  }
+}
+
 function renderPostGamePanel() {
   if (!elements.postGameModal) return;
+
   const content = getPostGameContent();
 
   if (!content || !isGameOver()) {
@@ -1217,7 +1316,7 @@ function renderPostGamePanel() {
     content.explanation || "No explanation available for this verse.";
   elements.postGameIntroTitle.textContent = content.introTitle;
   elements.postGameIntroText.textContent = content.introText;
-  elements.postGameNextBtn.hidden = !(state.mode === "practice");
+  elements.postGameNextBtn.hidden = state.mode !== "practice";
 
   renderTriviaSection(content.trivia);
 
@@ -1232,6 +1331,7 @@ function renderPostGamePanel() {
 
 function closePostGamePanel() {
   if (!elements.postGameModal) return;
+
   elements.postGameModal.dataset.open = "false";
   elements.postGameModal.setAttribute("aria-hidden", "true");
   state.postGameOpen = false;
@@ -1245,18 +1345,21 @@ function renderPuzzleView() {
   syncPreferenceControls();
   syncActionButtons();
   renderPostGamePanel();
+
   if (state.status === "won") {
     renderStatus(
       `Correct — ${state.currentPuzzle.verse.book} (${state.currentPuzzle.verse.reference}).`,
     );
     return;
   }
+
   if (state.status === "lost") {
     renderStatus(
       `Out of guesses — the answer was ${state.currentPuzzle.verse.book} (${state.currentPuzzle.verse.reference}).`,
     );
     return;
   }
+
   renderStatus();
 }
 
@@ -1281,11 +1384,14 @@ function closeSuggestions() {
 
 function updateComboboxA11y(isOpen) {
   if (!elements.guessInput) return;
+
   elements.guessInput.setAttribute("aria-expanded", String(isOpen));
+
   const active =
     isOpen && state.selectedSuggestionIndex >= 0
       ? `suggestion-${state.selectedSuggestionIndex}`
       : "";
+
   elements.guessInput.setAttribute("aria-activedescendant", active);
 }
 
@@ -1304,9 +1410,11 @@ function renderSuggestions() {
     closeSuggestions();
     return;
   }
+
   elements.autocomplete.innerHTML = state.currentSuggestions
     .map((book, index) => {
       const active = index === state.selectedSuggestionIndex;
+
       return `
         <button
           id="suggestion-${index}"
@@ -1321,6 +1429,7 @@ function renderSuggestions() {
       `;
     })
     .join("");
+
   openSuggestions();
   updateComboboxA11y(state.selectedSuggestionIndex >= 0);
   scrollActiveSuggestionIntoView();
@@ -1328,14 +1437,17 @@ function renderSuggestions() {
 
 function updateSuggestions(query) {
   const value = query.trim().toLowerCase();
+
   if (!value) {
     resetSuggestionsState();
     closeSuggestions();
     return;
   }
+
   state.currentSuggestions = books
     .filter((book) => book.name.toLowerCase().includes(value))
     .slice(0, CONFIG.ui.maxSuggestions);
+
   state.selectedSuggestionIndex = -1;
   renderSuggestions();
 }
@@ -1345,37 +1457,34 @@ function handleInvalidGuess() {
 }
 
 function handleDuplicateGuess(bookName) {
-  renderStatus("You already tried " + bookName + ".");
+  renderStatus(`You already tried ${bookName}.`);
+}
+
+function refreshAfterGuess(message) {
+  renderHintBlock();
+  renderGuessRows(true);
+  renderProximityLine();
+  syncPreferenceControls();
+  syncActionButtons();
+  renderStatus(message);
+  saveProgress();
+  renderPuzzleView();
 }
 
 function handleSolvedGuess() {
   state.status = "won";
   recordPuzzleCompletion("won");
-  renderHintBlock();
-  renderGuessRows(true);
-  renderProximityLine();
-  syncPreferenceControls();
-  syncActionButtons();
-  renderStatus(
+  refreshAfterGuess(
     `Correct — ${state.currentPuzzle.verse.book} (${state.currentPuzzle.verse.reference}).`,
   );
-  saveProgress();
-  renderPuzzleView();
 }
 
 function handleLostGuess() {
   state.status = "lost";
   recordPuzzleCompletion("lost");
-  renderHintBlock();
-  renderGuessRows(true);
-  renderProximityLine();
-  syncPreferenceControls();
-  syncActionButtons();
-  renderStatus(
+  refreshAfterGuess(
     `Out of guesses — the answer was ${state.currentPuzzle.verse.book} (${state.currentPuzzle.verse.reference}).`,
   );
-  saveProgress();
-  renderPuzzleView();
 }
 
 function handleIncorrectGuess(bookName) {
@@ -1384,9 +1493,7 @@ function handleIncorrectGuess(bookName) {
   renderProximityLine();
   syncPreferenceControls();
   syncActionButtons();
-  renderStatus(
-    `${bookName} added. Use the colors and clues for your next guess.`,
-  );
+  renderStatus(`${bookName} added. Use the colors and clues for your next guess.`);
   saveProgress();
 }
 
@@ -1395,29 +1502,36 @@ function applyGuess(rawGuess) {
     renderPuzzleView();
     return;
   }
+
   const match = getBookByName(rawGuess);
   if (!match) {
     handleInvalidGuess();
     return;
   }
+
   if (state.guesses.some((guess) => guess.book === match.name)) {
     handleDuplicateGuess(match.name);
     return;
   }
+
   const result = compareGuess(match.name);
   if (!result) return;
+
   state.guesses.push(result);
   resetInput();
   resetSuggestionsState();
   closeSuggestions();
+
   if (result.solved) {
     handleSolvedGuess();
     return;
   }
+
   if (state.guesses.length >= getMaxGuesses()) {
     handleLostGuess();
     return;
   }
+
   handleIncorrectGuess(match.name);
 }
 
@@ -1430,6 +1544,7 @@ function buildShareSummary() {
           : cell.state === "partial"
             ? "🟨"
             : "🟥";
+
       return [
         tile(guess.testament),
         tile(guess.section),
@@ -1444,6 +1559,7 @@ function buildShareText() {
   const solved = state.status === "won";
   const guessWord = state.guesses.length === 1 ? "guess" : "guesses";
   const modeLabel = state.mode === "daily" ? "Daily" : "Practice";
+
   return `Bibdle ${modeLabel} ${formatDate()}
 ${solved ? "Solved" : state.status === "lost" ? "Lost" : "In progress"} in ${state.guesses.length} ${guessWord}
 ${buildShareSummary()}`;
@@ -1457,59 +1573,42 @@ async function copyResult() {
     renderStatus("Clipboard access is unavailable in this browser.");
   }
 }
+
+function setModalOpen(modal, isOpen) {
+  if (!modal) return;
+
+  modal.dataset.open = isOpen ? "true" : "false";
+  modal.setAttribute("aria-hidden", isOpen ? "false" : "true");
+}
+
+function openHelpModal() {
+  setModalOpen(elements.helpModal, true);
+}
+
+function closeHelpModal() {
+  setModalOpen(elements.helpModal, false);
+}
+
 function openSettingsModal() {
   if (!elements.settingsModal) return;
+
   syncSettingsControls();
-  elements.settingsModal.dataset.open = "true";
-  elements.settingsModal.setAttribute("aria-hidden", "false");
+  setModalOpen(elements.settingsModal, true);
 }
 
 function closeSettingsModal() {
-  if (!elements.settingsModal) return;
-  elements.settingsModal.dataset.open = "false";
-  elements.settingsModal.setAttribute("aria-hidden", "true");
-}
-
-function renderStatsModal() {
-  const statsObj = computeStatsSummary();
-
-  if (elements.statsPlayed) {
-    elements.statsPlayed.textContent = String(statsObj.played);
-  }
-  if (elements.statsWon) {
-    elements.statsWon.textContent = String(statsObj.won);
-  }
-  if (elements.statsLost) {
-    elements.statsLost.textContent = String(statsObj.lost);
-  }
-  if (elements.statsCurrentStreak) {
-    elements.statsCurrentStreak.textContent = String(statsObj.currentStreak);
-  }
-  if (elements.statsBestStreak) {
-    elements.statsBestStreak.textContent = String(statsObj.bestStreak);
-  }
-  if (elements.statsGuessDistribution) {
-    renderStatsSection(statsObj, elements.statsGuessDistribution);
-  }
-  if (elements.statsStreakChips) {
-    elements.statsStreakChips.hidden = false;
-  }
-  if (elements.statsModalBadges) {
-    renderEarnedBadges(elements.statsModalBadges);
-  }
+  setModalOpen(elements.settingsModal, false);
 }
 
 function openStatsModal() {
   if (!elements.statsModal) return;
+
   renderStatsModal();
-  elements.statsModal.dataset.open = "true";
-  elements.statsModal.setAttribute("aria-hidden", "false");
+  setModalOpen(elements.statsModal, true);
 }
 
 function closeStatsModal() {
-  if (!elements.statsModal) return;
-  elements.statsModal.dataset.open = "false";
-  elements.statsModal.setAttribute("aria-hidden", "true");
+  setModalOpen(elements.statsModal, false);
 }
 
 function syncSettingsControls() {
@@ -1541,15 +1640,7 @@ function applyAccessibilityPreferences() {
     !!state.preferences.largeText,
   );
 }
-function openHelpModal() {
-  elements.helpModal.dataset.open = "true";
-  elements.helpModal.setAttribute("aria-hidden", "false");
-}
 
-function closeHelpModal() {
-  elements.helpModal.dataset.open = "false";
-  elements.helpModal.setAttribute("aria-hidden", "true");
-}
 function handleReducedMotionToggle(event) {
   state.preferences.reducedAnimation = event.target.checked;
   applyAccessibilityPreferences();
@@ -1572,6 +1663,7 @@ function handleSoundToggle(event) {
   state.preferences.sound = event.target.checked;
   savePreferences();
 }
+
 function handleGuessSubmit(event) {
   event.preventDefault();
   applyGuess(elements.guessInput.value);
@@ -1579,12 +1671,14 @@ function handleGuessSubmit(event) {
 
 function handleGuessInput(event) {
   if (isGameOver()) return;
+
   updateSuggestions(event.target.value);
   saveProgress();
 }
 
 function moveSuggestion(nextIndex) {
   if (!state.currentSuggestions.length) return;
+
   state.selectedSuggestionIndex = nextIndex;
   renderSuggestions();
 }
@@ -1600,16 +1694,19 @@ function handleGuessKeydown(event) {
       event.preventDefault();
       applyGuess(elements.guessInput.value);
     }
+
     if (event.key === "ArrowDown" && hasSuggestions) {
       event.preventDefault();
       state.selectedSuggestionIndex = 0;
       renderSuggestions();
     }
+
     return;
   }
 
   if (event.key === "ArrowDown") {
     event.preventDefault();
+
     const next =
       state.selectedSuggestionIndex < 0
         ? 0
@@ -1617,16 +1714,19 @@ function handleGuessKeydown(event) {
           state.selectedSuggestionIndex + 1,
           state.currentSuggestions.length - 1,
         );
+
     moveSuggestion(next);
     return;
   }
 
   if (event.key === "ArrowUp") {
     event.preventDefault();
+
     const next =
       state.selectedSuggestionIndex < 0
         ? state.currentSuggestions.length - 1
         : Math.max(state.selectedSuggestionIndex - 1, 0);
+
     moveSuggestion(next);
     return;
   }
@@ -1636,25 +1736,25 @@ function handleGuessKeydown(event) {
     return;
   }
 
-  if (event.key === "Enter") {
-    if (state.selectedSuggestionIndex >= 0) {
-      event.preventDefault();
-      const picked = state.currentSuggestions[state.selectedSuggestionIndex];
-      if (picked) applyGuess(picked.name);
-    }
-    return;
+  if (event.key === "Enter" && state.selectedSuggestionIndex >= 0) {
+    event.preventDefault();
+    const picked = state.currentSuggestions[state.selectedSuggestionIndex];
+    if (picked) applyGuess(picked.name);
   }
 }
 
 function handleSuggestionClick(event) {
   const button = event.target.closest(".suggestion");
   if (!button) return;
+
   const book = state.currentSuggestions[Number(button.dataset.index)];
   if (book) applyGuess(book.name);
 }
 
 function handleDocumentClick(event) {
-  if (!elements.guessForm.contains(event.target)) closeSuggestions();
+  if (!elements.guessForm.contains(event.target)) {
+    closeSuggestions();
+  }
 }
 
 function handleThemeToggle() {
@@ -1670,6 +1770,7 @@ function handleDifficultyChange(event) {
     renderStatus("Difficulty can only be changed before starting the puzzle.");
     return;
   }
+
   const value = event.target.value;
   if (!CONFIG.modes[value]) return;
 
@@ -1683,6 +1784,7 @@ function handleDifficultyChange(event) {
 function handleModeChange(event) {
   const value = event.target.value;
   if (value !== "daily" && value !== "practice") return;
+
   state.mode = value;
   state.preferences.preferredMode = value;
   savePreferences();
@@ -1694,44 +1796,54 @@ function handleNextPracticePuzzle() {
   resetPuzzle("practice");
 }
 
+function bindBackdropClose(modal, onClose) {
+  if (!modal) return;
+
+  modal.addEventListener("click", (event) => {
+    if (event.target === modal) onClose();
+  });
+}
+
 function bindEvents() {
   elements.guessForm.addEventListener("submit", handleGuessSubmit);
   elements.guessInput.addEventListener("input", handleGuessInput);
   elements.guessInput.addEventListener("keydown", handleGuessKeydown);
   elements.autocomplete.addEventListener("click", handleSuggestionClick);
+
   document.addEventListener("click", handleDocumentClick);
+
   elements.helpBtn.addEventListener("click", openHelpModal);
   elements.closeHelpBtn.addEventListener("click", closeHelpModal);
-  elements.helpModal.addEventListener("click", (event) => {
-    if (event.target === elements.helpModal) closeHelpModal();
-  });
+  bindBackdropClose(elements.helpModal, closeHelpModal);
+
   elements.shareBtn.addEventListener("click", copyResult);
-  if (elements.nextPracticeBtn)
-    elements.nextPracticeBtn.addEventListener(
-      "click",
-      handleNextPracticePuzzle,
-    );
-  if (elements.postGameCloseBtn)
-    elements.postGameCloseBtn.addEventListener("click", closePostGamePanel);
-  if (elements.postGameNextBtn)
-    elements.postGameNextBtn.addEventListener(
-      "click",
-      handleNextPracticePuzzle,
-    );
-  if (elements.postGameModal) {
-    elements.postGameModal.addEventListener("click", (event) => {
-      if (event.target === elements.postGameModal) closePostGamePanel();
-    });
+
+  if (elements.nextPracticeBtn) {
+    elements.nextPracticeBtn.addEventListener("click", handleNextPracticePuzzle);
   }
-  if (elements.themeToggle)
+
+  if (elements.postGameCloseBtn) {
+    elements.postGameCloseBtn.addEventListener("click", closePostGamePanel);
+  }
+
+  if (elements.postGameNextBtn) {
+    elements.postGameNextBtn.addEventListener("click", handleNextPracticePuzzle);
+  }
+
+  bindBackdropClose(elements.postGameModal, closePostGamePanel);
+
+  if (elements.themeToggle) {
     elements.themeToggle.addEventListener("click", handleThemeToggle);
-  if (elements.difficultySelect)
-    elements.difficultySelect.addEventListener(
-      "change",
-      handleDifficultyChange,
-    );
-  if (elements.modeSelect)
+  }
+
+  if (elements.difficultySelect) {
+    elements.difficultySelect.addEventListener("change", handleDifficultyChange);
+  }
+
+  if (elements.modeSelect) {
     elements.modeSelect.addEventListener("change", handleModeChange);
+  }
+
   if (elements.settingsBtn) {
     elements.settingsBtn.addEventListener("click", openSettingsModal);
   }
@@ -1740,11 +1852,7 @@ function bindEvents() {
     elements.closeSettingsBtn.addEventListener("click", closeSettingsModal);
   }
 
-  if (elements.settingsModal) {
-    elements.settingsModal.addEventListener("click", (event) => {
-      if (event.target === elements.settingsModal) closeSettingsModal();
-    });
-  }
+  bindBackdropClose(elements.settingsModal, closeSettingsModal);
 
   if (elements.reducedMotionToggle) {
     elements.reducedMotionToggle.addEventListener(
@@ -1761,25 +1869,13 @@ function bindEvents() {
   }
 
   if (elements.largeTextToggle) {
-    elements.largeTextToggle.addEventListener(
-      "change",
-      handleLargeTextToggle,
-    );
+    elements.largeTextToggle.addEventListener("change", handleLargeTextToggle);
   }
 
   if (elements.soundToggle) {
     elements.soundToggle.addEventListener("change", handleSoundToggle);
   }
-  document.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape") return;
-    if (elements.settingsModal?.dataset.open === "true") {
-      closeSettingsModal();
-    } else if (elements.helpModal?.dataset.open === "true") {
-      closeHelpModal();
-    } else if (elements.postGameModal?.dataset.open === "true") {
-      closePostGamePanel();
-    }
-  });
+
   if (elements.statsBtn) {
     elements.statsBtn.addEventListener("click", openStatsModal);
   }
@@ -1788,20 +1884,33 @@ function bindEvents() {
     elements.closeStatsBtn.addEventListener("click", closeStatsModal);
   }
 
-  if (elements.statsModal) {
-    elements.statsModal.addEventListener("click", (event) => {
-      if (event.target === elements.statsModal) closeStatsModal();
-    });
-  }
+  bindBackdropClose(elements.statsModal, closeStatsModal);
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+
+    if (elements.settingsModal?.dataset.open === "true") {
+      closeSettingsModal();
+    } else if (elements.helpModal?.dataset.open === "true") {
+      closeHelpModal();
+    } else if (elements.statsModal?.dataset.open === "true") {
+      closeStatsModal();
+    } else if (elements.postGameModal?.dataset.open === "true") {
+      closePostGamePanel();
+    }
+  });
 }
 
 function initGame() {
   const restored = loadProgress();
+
   if (!restored) {
     startPuzzle(state.mode);
     saveProgress();
   }
+
   renderPuzzleView();
+
   if (restored) {
     renderStatus("Progress restored.");
   }
@@ -1812,6 +1921,7 @@ function startPuzzle(mode = state.mode) {
   state.currentPuzzle = buildCurrentPuzzle(mode);
   state.guesses = [];
   state.status = "playing";
+
   closePostGamePanel();
   resetInput();
   resetSuggestionsState();
@@ -1832,17 +1942,20 @@ function init() {
   initTheme();
   syncPreferenceControls();
   bindEvents();
+
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       stopCountdownTimer();
       return;
     }
+
     if (state.mode === "daily" && !isGameOver()) {
       startCountdownTimer();
     } else {
       updateCountdownLabel();
     }
   });
+
   initGame();
 }
 
