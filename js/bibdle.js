@@ -3,8 +3,12 @@ import {
   getAuth,
   GoogleAuthProvider,
   onAuthStateChanged,
+  signInAnonymously,
   signInWithPopup,
+  signInWithCredential,
+  linkWithPopup,
   signOut as firebaseSignOut,
+  fetchSignInMethodsForEmail,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import {
   getFirestore,
@@ -226,7 +230,6 @@ const elements = {
   postGameReference: document.getElementById("postGameReference"),
   postGameBook: document.getElementById("postGameBook"),
   postGameVerse: document.getElementById("postGameVerse"),
-  postGameExplanation: document.getElementById("postGameExplanation"),
   postGameIntroTitle: document.getElementById("postGameIntroTitle"),
   postGameIntroText: document.getElementById("postGameIntroText"),
   postGameCloseBtn: document.getElementById("postGameCloseBtn"),
@@ -292,6 +295,22 @@ function sanitizeLeaderboardName(name) {
   if (!raw) return "Anonymous Disciple";
   const cleaned = raw.replace(/\s+/g, " ").replace(/[<>]/g, "");
   return cleaned.length > 24 ? `${cleaned.slice(0, 24)}…` : cleaned;
+}
+
+function getAnonymousPublicNameFromUid(uid) {
+  const safeUid = String(uid || "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+  const suffix = (safeUid || "unknown00").slice(0, 8).padEnd(8, "0");
+  return `disciple_${suffix}`;
+}
+
+function getPublicUserName(user = state.auth.user) {
+  if (!user) return "";
+
+  if (user.isAnonymous) {
+    return getAnonymousPublicNameFromUid(user.uid);
+  }
+
+  return sanitizeLeaderboardName(user.displayName || user.email || "Google user");
 }
 
 function formatLeaderboardTime(value) {
@@ -876,27 +895,41 @@ function renderLeaderboardSummary(stats) {
   `;
 }
 
+async function ensureAnonymousAuthForDailySubmission() {
+  if (!state.auth.enabled || !firebaseAuth) return null;
+
+  if (state.auth.user?.uid) {
+    return state.auth.user;
+  }
+
+  try {
+    await signInAnonymously(firebaseAuth);
+    return firebaseAuth.currentUser || null;
+  } catch (error) {
+    console.error("Anonymous auth failed:", error);
+    return null;
+  }
+}
+
 async function submitDailyResultToLeaderboard(outcome) {
-  if (
-    !state.auth.enabled ||
-    !firebaseDb ||
-    !state.auth.user?.uid ||
-    state.mode !== "daily"
-  ) {
+  if (!state.auth.enabled || !firebaseDb || state.mode !== "daily") {
+    return;
+  }
+
+  const user = await ensureAnonymousAuthForDailySubmission();
+  if (!user?.uid) {
+    renderStatus("Global submission is unavailable right now, but your local result was saved.");
     return;
   }
 
   const dateKey = getDailyDateKey();
-  const uid = state.auth.user.uid;
+  const uid = user.uid;
   const statsRef = getDailyStatsDocRef(dateKey);
   const entryRef = getLeaderboardEntryDocRef(dateKey, uid);
 
   if (!statsRef || !entryRef) return;
 
-  const displayName = sanitizeLeaderboardName(
-    state.auth.user.displayName || "",
-  );
-
+  const displayName = getPublicUserName(user);
   const puzzleId = getDailyPuzzleId();
   const isWin = outcome?.result === "won";
   const guesses = Number.isInteger(outcome?.guesses) ? outcome.guesses : null;
@@ -975,7 +1008,12 @@ function renderLeaderboardList(entries) {
       ${entries
       .map((entry, index) => {
         const isCurrentUser = currentUid && entry.uid === currentUid;
-        const name = sanitizeLeaderboardName(entry.displayName);
+        const name =
+          entry.uid && String(entry.displayName || "").startsWith("disciple_")
+            ? entry.displayName
+            : entry.displayName
+              ? sanitizeLeaderboardName(entry.displayName)
+              : getAnonymousPublicNameFromUid(entry.uid);
         return `
             <div class="leaderboard-row${isCurrentUser ? " is-current-user" : ""}">
               <div class="leaderboard-rank">#${index + 1}</div>
@@ -996,7 +1034,7 @@ function renderCurrentUserRank(rankEntry) {
   if (!state.auth.user) {
     elements.leaderboardUserRank.innerHTML = `
       <div class="leaderboard-empty">
-        Sign in to submit your Daily result and see your personal placement.
+        Complete today’s Daily puzzle to join the global leaderboard automatically.
       </div>
     `;
     return;
@@ -1502,12 +1540,8 @@ function recordPuzzleCompletion(outcome) {
     submitDailyResultToLeaderboard({
       result: outcome,
       guesses: outcome === "won" ? state.guesses.length : null,
-      dateKey: completionDate || getTodayKey(),
-      puzzleId:
-        state.currentPuzzle.reference ||
-        state.currentPuzzle.book ||
-        completionDate ||
-        getTodayKey(),
+      dateKey: completionDate || getDailyDateKey(),
+      puzzleId: getDailyPuzzleId(),
     });
 
     return;
@@ -1583,10 +1617,20 @@ function renderAuthUI() {
   }
 
   if (syncing) {
-    elements.signInBtn.hidden = true;
-    elements.signOutBtn.hidden = false;
+    elements.signInBtn.hidden = !!user && !user.isAnonymous;
+    elements.signInBtn.disabled = true;
+    elements.signOutBtn.hidden = !user || user.isAnonymous;
     elements.signOutBtn.disabled = true;
     setAuthStatus("Syncing…");
+    return;
+  }
+
+  if (user?.isAnonymous) {
+    elements.signInBtn.hidden = false;
+    elements.signInBtn.disabled = false;
+    elements.signInBtn.textContent = "Sign in";
+    elements.signOutBtn.hidden = true;
+    setAuthStatus(`Playing anonymously as ${getPublicUserName(user)}`);
     return;
   }
 
@@ -1594,12 +1638,13 @@ function renderAuthUI() {
     elements.signInBtn.hidden = true;
     elements.signOutBtn.hidden = false;
     elements.signOutBtn.disabled = false;
-    setAuthStatus(`Signed in as ${user.displayName || user.email || "Google user"}`);
+    setAuthStatus(`Signed in as ${getPublicUserName(user)}`);
     return;
   }
 
   elements.signInBtn.hidden = false;
   elements.signInBtn.disabled = false;
+  elements.signInBtn.textContent = "Sign in";
   elements.signOutBtn.hidden = true;
   setAuthStatus("Playing locally");
 }
@@ -2551,8 +2596,6 @@ function renderPostGamePanel() {
   elements.postGameReference.textContent = content.reference;
   elements.postGameBook.textContent = content.bookName;
   elements.postGameVerse.textContent = content.verseText;
-  elements.postGameExplanation.textContent =
-    content.explanation || "No explanation available for this verse.";
   elements.postGameIntroTitle.textContent = content.introTitle;
   elements.postGameIntroText.textContent = content.introText;
   elements.postGameNextBtn.hidden = state.mode !== "practice";
@@ -3131,11 +3174,13 @@ async function handleAuthStateChange(user) {
     if (!hadCloudProfile) {
       await syncLocalDataToCloud(user);
     }
-
-    setAuthStatus(`Signed in as ${user.displayName || user.email || "Google user"}`);
   } catch (error) {
     console.error("Auth sync failed:", error);
-    setAuthStatus("Signed in, cloud sync unavailable");
+    if (user.isAnonymous) {
+      setAuthStatus(`Playing anonymously as ${getPublicUserName(user)}`);
+    } else {
+      setAuthStatus("Signed in, cloud sync unavailable");
+    }
   } finally {
     state.auth.syncing = false;
     renderAuthUI();
@@ -3179,6 +3224,29 @@ async function handleSignIn() {
   try {
     state.auth.syncing = true;
     renderAuthUI();
+
+    const currentUser = firebaseAuth.currentUser;
+
+    if (currentUser?.isAnonymous) {
+      try {
+        await linkWithPopup(currentUser, firebaseGoogleProvider);
+        return;
+      } catch (error) {
+        const collisionCodes = new Set([
+          "auth/credential-already-in-use",
+          "auth/email-already-in-use",
+          "auth/account-exists-with-different-credential",
+        ]);
+
+        if (collisionCodes.has(error?.code)) {
+          await signInWithPopup(firebaseAuth, firebaseGoogleProvider);
+          return;
+        }
+
+        throw error;
+      }
+    }
+
     await signInWithPopup(firebaseAuth, firebaseGoogleProvider);
   } catch (error) {
     console.error("Sign-in failed:", error);
@@ -3192,6 +3260,11 @@ async function handleSignIn() {
 async function handleSignOut() {
   if (!state.auth.enabled || !firebaseAuth) {
     setAuthStatus("Playing locally");
+    return;
+  }
+
+  if (firebaseAuth.currentUser?.isAnonymous) {
+    renderAuthUI();
     return;
   }
 
